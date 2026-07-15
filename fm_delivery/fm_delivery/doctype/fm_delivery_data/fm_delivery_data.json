@@ -1,0 +1,135 @@
+{
+ "actions": [],
+ "autoname": "autoincrement",
+ "creation": "2026-07-14 23:34:13.745400",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "fm_delivery_data_section",
+  "date",
+  "vendor_name",
+  "agent_name",
+  "agent_id",
+  "fhr_id",
+  "hub_id",
+  "hub_name",
+  "tripsheet_id",
+  "sellers_assigned",
+  "sellers_attempted",
+  "delivered_reverse_shipment",
+  "undelivered_reverse_shipment",
+  "assigned_forward_shipment",
+  "picked_forward_shipment",
+  "tripsheet_closure_date"
+ ],
+ "fields": [
+  {
+   "fieldname": "fm_delivery_data_section",
+   "fieldtype": "Section Break",
+   "label": "FM Delivery Data"
+  },
+  {
+   "fieldname": "date",
+   "fieldtype": "Date",
+   "label": "Date"
+  },
+  {
+   "fieldname": "vendor_name",
+   "fieldtype": "Data",
+   "label": "Vendor Name"
+  },
+  {
+   "fieldname": "agent_name",
+   "fieldtype": "Data",
+   "label": "Agent Name"
+  },
+  {
+   "fieldname": "agent_id",
+   "fieldtype": "Data",
+   "label": "Agent ID"
+  },
+  {
+   "fieldname": "fhr_id",
+   "fieldtype": "Data",
+   "label": "FHR ID"
+  },
+  {
+   "fieldname": "hub_id",
+   "fieldtype": "Data",
+   "label": "Hub ID"
+  },
+  {
+   "fieldname": "hub_name",
+   "fieldtype": "Data",
+   "label": "Hub Name"
+  },
+  {
+   "fieldname": "tripsheet_id",
+   "fieldtype": "Data",
+   "label": "Tripsheet ID"
+  },
+  {
+   "fieldname": "sellers_assigned",
+   "fieldtype": "Int",
+   "label": "Sellers Assigned"
+  },
+  {
+   "fieldname": "sellers_attempted",
+   "fieldtype": "Int",
+   "label": "Sellers Attempted"
+  },
+  {
+   "fieldname": "delivered_reverse_shipment",
+   "fieldtype": "Int",
+   "label": "Delivered Reverse Shipment"
+  },
+  {
+   "fieldname": "undelivered_reverse_shipment",
+   "fieldtype": "Int",
+   "label": "Undelivered Reverse Shipment"
+  },
+  {
+   "fieldname": "assigned_forward_shipment",
+   "fieldtype": "Int",
+   "label": "Assigned Forward Shipment"
+  },
+  {
+   "fieldname": "picked_forward_shipment",
+   "fieldtype": "Int",
+   "label": "Picked Forward Shipment"
+  },
+  {
+   "fieldname": "tripsheet_closure_date",
+   "fieldtype": "Datetime",
+   "label": "Tripsheet Closure Date"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-15 00:30:28.409757",
+ "modified_by": "Administrator",
+ "module": "FM Delivery",
+ "name": "FM Delivery Data",
+ "naming_rule": "Autoincrement",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
