@@ -6,7 +6,10 @@ from fm_delivery.utils.excel_import import ExcelImporter
 @frappe.whitelist()
 def import_excel(docname):
 
-    import_doc = frappe.get_doc("FM Delivery Import", docname)
+    import_doc = frappe.get_doc(
+        "FM Delivery Import",
+        docname
+    )
 
     importer = ExcelImporter(import_doc)
 
@@ -14,11 +17,9 @@ def import_excel(docname):
 
     importer.validate_headers()
 
-    total = importer.import_data()
+    result = importer.import_data()
 
     import_doc.status = "Completed"
     import_doc.save(ignore_permissions=True)
 
-    return {
-        "imported": total
-    }
+    return result

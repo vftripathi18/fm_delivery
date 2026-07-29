@@ -7,20 +7,13 @@
  "field_order": [
   "fm_delivery_data_section",
   "date",
-  "vendor_name",
-  "agent_name",
-  "agent_id",
-  "fhr_id",
-  "hub_id",
+  "state",
   "hub_name",
-  "tripsheet_id",
-  "sellers_assigned",
-  "sellers_attempted",
-  "delivered_reverse_shipment",
-  "undelivered_reverse_shipment",
-  "assigned_forward_shipment",
-  "picked_forward_shipment",
-  "tripsheet_closure_date"
+  "rider_name",
+  "fhr_id",
+  "return_shipment",
+  "forward_shipment",
+  "total_shipment"
  ],
  "fields": [
   {
@@ -34,29 +27,9 @@
    "label": "Date"
   },
   {
-   "fieldname": "vendor_name",
-   "fieldtype": "Data",
-   "label": "Vendor Name"
-  },
-  {
-   "fieldname": "agent_name",
-   "fieldtype": "Data",
-   "label": "Agent Name"
-  },
-  {
-   "fieldname": "agent_id",
-   "fieldtype": "Data",
-   "label": "Agent ID"
-  },
-  {
    "fieldname": "fhr_id",
    "fieldtype": "Data",
    "label": "FHR ID"
-  },
-  {
-   "fieldname": "hub_id",
-   "fieldtype": "Data",
-   "label": "Hub ID"
   },
   {
    "fieldname": "hub_name",
@@ -64,50 +37,35 @@
    "label": "Hub Name"
   },
   {
-   "fieldname": "tripsheet_id",
+   "fieldname": "state",
    "fieldtype": "Data",
-   "label": "Tripsheet ID"
+   "label": "State"
   },
   {
-   "fieldname": "sellers_assigned",
+   "fieldname": "rider_name",
+   "fieldtype": "Data",
+   "label": "Rider Name"
+  },
+  {
+   "fieldname": "return_shipment",
    "fieldtype": "Int",
-   "label": "Sellers Assigned"
+   "label": "Return Shipment"
   },
   {
-   "fieldname": "sellers_attempted",
+   "fieldname": "forward_shipment",
    "fieldtype": "Int",
-   "label": "Sellers Attempted"
+   "label": "Forward Shipment"
   },
   {
-   "fieldname": "delivered_reverse_shipment",
+   "fieldname": "total_shipment",
    "fieldtype": "Int",
-   "label": "Delivered Reverse Shipment"
-  },
-  {
-   "fieldname": "undelivered_reverse_shipment",
-   "fieldtype": "Int",
-   "label": "Undelivered Reverse Shipment"
-  },
-  {
-   "fieldname": "assigned_forward_shipment",
-   "fieldtype": "Int",
-   "label": "Assigned Forward Shipment"
-  },
-  {
-   "fieldname": "picked_forward_shipment",
-   "fieldtype": "Int",
-   "label": "Picked Forward Shipment"
-  },
-  {
-   "fieldname": "tripsheet_closure_date",
-   "fieldtype": "Datetime",
-   "label": "Tripsheet Closure Date"
+   "label": "Total Shipment"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-15 00:30:28.409757",
+ "modified": "2026-07-17 14:22:54.908309",
  "modified_by": "Administrator",
  "module": "FM Delivery",
  "name": "FM Delivery Data",
