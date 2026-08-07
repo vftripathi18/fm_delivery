@@ -5,7 +5,6 @@ frappe.ui.form.on("FM Delivery Import", {
             return;
         }
 
-        // Remove duplicate buttons on refresh
         frm.clear_custom_buttons();
 
         // Download Template Button
@@ -17,6 +16,7 @@ frappe.ui.form.on("FM Delivery Import", {
             );
 
         }, __("Actions"));
+
 
         // Import Data Button
         frm.add_custom_button(__("Import Data"), function () {
@@ -40,30 +40,38 @@ frappe.ui.form.on("FM Delivery Import", {
 
                     let message_html = `
                         <div style="font-size:14px;line-height:1.8;">
+                            📄 <b>Attempted :</b> ${r.message.attempted}<br>
                             ✅ <b>Imported :</b> ${r.message.imported}<br>
-                            ⚠️ <b>Skipped :</b> ${r.message.skipped}<br>
-                            ❌ <b>Failed :</b> ${r.message.failed}
+                            ❌ <b>Failed :</b> ${r.message.failed}<br>
+                            ➖ <b>Difference :</b> ${r.message.difference}
                         </div>
                     `;
 
                     if (r.message.error_file) {
+
                         frappe.msgprint({
                             title: __("Import Summary"),
-                            indicator: "red",
+                            indicator: "orange",
                             message: message_html,
                             primary_action: {
                                 action: function () {
-                                    window.open(r.message.error_file, "_blank");
+                                    window.open(
+                                        r.message.error_file,
+                                        "_blank"
+                                    );
                                 },
                                 label: __("Download Error Report")
                             }
                         });
+
                     } else {
+
                         frappe.msgprint({
                             title: __("Import Summary"),
                             indicator: "green",
                             message: message_html
                         });
+
                     }
 
                     frm.reload_doc();
@@ -74,11 +82,19 @@ frappe.ui.form.on("FM Delivery Import", {
 
         }, __("Actions"));
 
-        // Download Error Report Button (if error file exists on the document)
+
+        // Download Error Report Button
         if (frm.doc.error_file) {
+
             frm.add_custom_button(__("Download Error Report"), function () {
-                window.open(frm.doc.error_file, "_blank");
+
+                window.open(
+                    frm.doc.error_file,
+                    "_blank"
+                );
+
             }, __("Actions"));
+
         }
 
     }
