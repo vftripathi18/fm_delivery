@@ -105,16 +105,16 @@ class ExcelImporter:
     # Integer Converter
     # ------------------------------------------------------------
 
-    def to_int(self, value):
+    def to_float(self, value):
 
         if value in (None, "", "NULL"):
-            return 0
+            return 0.0
 
         try:
-            return int(float(value))
+            return float(value)
 
         except Exception:
-            return 0
+            return 0.0
 
 
     # ------------------------------------------------------------
@@ -203,15 +203,15 @@ class ExcelImporter:
                             row.get("FHRID") or ""
                         ).strip(),
 
-                        "return_shipment": self.to_int(
+                        "return_shipment": self.to_float(
                             row.get("Return Shipment")
                         ),
 
-                        "forward_shipment": self.to_int(
+                        "forward_shipment": self.to_float(
                             row.get("Forward Shipment")
                         ),
 
-                        "total_shipment": self.to_int(
+                        "total_shipment": self.to_float(
                             row.get("Total Shipment")
                         ),
                     }
