@@ -14,7 +14,14 @@
   "fhr_id",
   "return_shipment",
   "forward_shipment",
-  "total_shipment"
+  "total_shipment",
+  "column_break_qojr",
+  "fix_salary",
+  "fwd_rate",
+  "rto_rate",
+  "total_rate",
+  "salary",
+  "rcps"
  ],
  "fields": [
   {
@@ -49,24 +56,60 @@
   },
   {
    "fieldname": "return_shipment",
-   "fieldtype": "Int",
+   "fieldtype": "Float",
    "label": "Return Shipment"
   },
   {
    "fieldname": "forward_shipment",
-   "fieldtype": "Int",
+   "fieldtype": "Float",
    "label": "Forward Shipment"
   },
   {
    "fieldname": "total_shipment",
-   "fieldtype": "Int",
+   "fieldtype": "Float",
    "label": "Total Shipment"
+  },
+  {
+   "fieldname": "column_break_qojr",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "fix_salary",
+   "fieldtype": "Currency",
+   "label": "FIX Salary"
+  },
+  {
+   "fieldname": "fwd_rate",
+   "fieldtype": "Float",
+   "label": "FWD Rate"
+  },
+  {
+   "fieldname": "rto_rate",
+   "fieldtype": "Float",
+   "label": "RTO Rate"
+  },
+  {
+   "fieldname": "total_rate",
+   "fieldtype": "Float",
+   "label": "Total Rate"
+  },
+  {
+   "fieldname": "salary",
+   "fieldtype": "Currency",
+   "label": "Salary",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rcps",
+   "fieldtype": "Float",
+   "label": "RCPS",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-06 16:53:34.318504",
+ "modified": "2026-08-10 11:54:46.945168",
  "modified_by": "mstripathi100@gmail.com",
  "module": "FM Delivery",
  "name": "FM Delivery Data",

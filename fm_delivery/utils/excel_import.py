@@ -12,12 +12,16 @@ class ExcelImporter:
     EXPECTED_HEADERS = [
         "Date",
         "State",
-        "Hub Name",
-        "Rider Name",
+        "Hub_Name",
         "FHRID",
-        "Return Shipment",
-        "Forward Shipment",
-        "Total Shipment",
+        "Agent_Name",
+        "Delivered Return",
+        "Picked Forward",
+        "Total",
+        "FIX Salary",
+        "FWD Rate",
+        "RTO Rate",
+        "Total Rate",
     ]
 
     def __init__(self, import_doc):
@@ -36,7 +40,6 @@ class ExcelImporter:
 
         if not self.import_doc.import_file.lower().endswith(".xlsx"):
             frappe.throw("Only .xlsx files are allowed.")
-
 
     # ------------------------------------------------------------
     # Load Excel
@@ -70,7 +73,6 @@ class ExcelImporter:
 
         return self.workbook, self.sheet
 
-
     # ------------------------------------------------------------
     # Validate Headers
     # ------------------------------------------------------------
@@ -100,9 +102,8 @@ class ExcelImporter:
                 """
             )
 
-
     # ------------------------------------------------------------
-    # Integer Converter
+    # Number Converter
     # ------------------------------------------------------------
 
     def to_float(self, value):
@@ -115,7 +116,6 @@ class ExcelImporter:
 
         except Exception:
             return 0.0
-
 
     # ------------------------------------------------------------
     # Date Converter
@@ -131,6 +131,58 @@ class ExcelImporter:
 
         return value
 
+    # ------------------------------------------------------------
+    # Calculate Salary
+    # ------------------------------------------------------------
+
+    def calculate_salary(
+        self,
+        fix_salary,
+        fwd_rate,
+        rto_rate,
+        total_rate,
+        delivered_return,
+        picked_forward,
+        total,
+    ):
+
+        # --------------------------------------------------------
+        # 1. FIX Salary
+        # --------------------------------------------------------
+
+        if fix_salary > 0:
+
+            return fix_salary
+
+        # --------------------------------------------------------
+        # 2. FWD + RTO Rate
+        # --------------------------------------------------------
+
+        if fwd_rate > 0 or rto_rate > 0:
+
+            salary = (
+                picked_forward * fwd_rate
+                +
+                delivered_return * rto_rate
+            )
+
+            return salary
+
+        # --------------------------------------------------------
+        # 3. Total Rate
+        # --------------------------------------------------------
+
+        if total_rate > 0:
+
+            salary = total * total_rate
+
+            return salary
+
+        # --------------------------------------------------------
+        # 4. No Salary Configuration
+        # --------------------------------------------------------
+
+        return 0.0
 
     # ------------------------------------------------------------
     # Import Data
@@ -144,12 +196,10 @@ class ExcelImporter:
 
         failed_rows = []
 
-
         headers = [
             str(cell.value).strip() if cell.value else ""
             for cell in self.sheet[1]
         ]
-
 
         for row_no, values in enumerate(
             self.sheet.iter_rows(
@@ -159,13 +209,17 @@ class ExcelImporter:
             start=2
         ):
 
-            # Skip completely empty excel rows
+            # Skip empty rows
             if not any(values):
                 continue
 
             attempted += 1
 
             try:
+
+                # ------------------------------------------------
+                # Convert Excel row into dictionary
+                # ------------------------------------------------
 
                 row = {
                     headers[i]: values[i]
@@ -175,14 +229,79 @@ class ExcelImporter:
                     for i in range(len(headers))
                 }
 
+                # ------------------------------------------------
+                # Basic values
+                # ------------------------------------------------
+
+                delivered_return = self.to_float(
+                    row.get("Delivered Return")
+                )
+
+                picked_forward = self.to_float(
+                    row.get("Picked Forward")
+                )
+
+                total = self.to_float(
+                    row.get("Total")
+                )
+
+                fix_salary = self.to_float(
+                    row.get("FIX Salary")
+                )
+
+                fwd_rate = self.to_float(
+                    row.get("FWD Rate")
+                )
+
+                rto_rate = self.to_float(
+                    row.get("RTO Rate")
+                )
+
+                total_rate = self.to_float(
+                    row.get("Total Rate")
+                )
+
+                # ------------------------------------------------
+                # Calculate Salary
+                # ------------------------------------------------
+
+                salary = self.calculate_salary(
+                    fix_salary=fix_salary,
+                    fwd_rate=fwd_rate,
+                    rto_rate=rto_rate,
+                    total_rate=total_rate,
+                    delivered_return=delivered_return,
+                    picked_forward=picked_forward,
+                    total=total,
+                )
+
+                # ------------------------------------------------
+                # Calculate RCPS
+                # ------------------------------------------------
+
+                if total > 0:
+
+                    rcps = salary / total
+
+                else:
+
+                    rcps = 0.0
+
+                # ------------------------------------------------
+                # Create Frappe Document
+                # ------------------------------------------------
 
                 doc = frappe.new_doc(
                     "FM Delivery Data"
                 )
 
-
                 doc.update(
                     {
+
+                        # ----------------------------
+                        # Basic Information
+                        # ----------------------------
+
                         "date": self.to_date(
                             row.get("Date")
                         ),
@@ -192,73 +311,95 @@ class ExcelImporter:
                         ).strip(),
 
                         "hub_name": str(
-                            row.get("Hub Name") or ""
+                            row.get("Hub_Name") or ""
                         ).strip(),
 
                         "rider_name": str(
-                            row.get("Rider Name") or ""
+                            row.get("Agent_Name") or ""
                         ).strip(),
 
                         "fhr_id": str(
                             row.get("FHRID") or ""
                         ).strip(),
 
-                        "return_shipment": self.to_float(
-                            row.get("Return Shipment")
-                        ),
+                        # ----------------------------
+                        # Shipment Information
+                        # ----------------------------
 
-                        "forward_shipment": self.to_float(
-                            row.get("Forward Shipment")
-                        ),
+                        "return_shipment":
+                            delivered_return,
 
-                        "total_shipment": self.to_float(
-                            row.get("Total Shipment")
-                        ),
+                        "forward_shipment":
+                            picked_forward,
+
+                        "total_shipment":
+                            total,
+
+                        # ----------------------------
+                        # Salary Configuration
+                        # ----------------------------
+
+                        "fix_salary":
+                            fix_salary,
+
+                        "fwd_rate":
+                            fwd_rate,
+
+                        "rto_rate":
+                            rto_rate,
+
+                        "total_rate":
+                            total_rate,
+
+                        # ----------------------------
+                        # Calculated Values
+                        # ----------------------------
+
+                        "salary":
+                            salary,
+
+                        "rcps":
+                            rcps,
                     }
                 )
 
+                # ------------------------------------------------
+                # Insert
+                # ------------------------------------------------
 
-                # Direct insert
-                # No duplicate validation
                 doc.insert(
                     ignore_permissions=True
                 )
 
-
                 imported += 1
-
-
 
             except Exception:
 
-
                 failed += 1
 
-
                 error_msg = frappe.get_traceback()
-
 
                 failed_rows.append(
                     {
                         "row_no": row_no,
                         "row_data": values,
-                        "error": error_msg.strip().split("\n")[-1],
+                        "error":
+                            error_msg.strip().split("\n")[-1],
                     }
                 )
-
 
                 frappe.log_error(
                     title=f"FM Delivery Import Row {row_no}",
                     message=error_msg
                 )
 
-
         frappe.db.commit()
 
-
+        # --------------------------------------------------------
+        # Error Report
+        # --------------------------------------------------------
 
         error_file_url = None
-
 
         if failed_rows:
 
@@ -266,27 +407,23 @@ class ExcelImporter:
                 failed_rows
             )
 
-
+        # --------------------------------------------------------
+        # Update Import Document
+        # --------------------------------------------------------
 
         self.import_doc.imported_rows = imported
+
         self.import_doc.failed_rows = failed
 
-
         self.import_doc.status = "Completed"
-
-
 
         if error_file_url:
 
             self.import_doc.error_file = error_file_url
 
-
-
         self.import_doc.save(
             ignore_permissions=True
         )
-
-
 
         return {
 
@@ -296,13 +433,13 @@ class ExcelImporter:
 
             "failed": failed,
 
-            "difference": attempted - (imported + failed),
+            "difference":
+                attempted - (imported + failed),
 
-            "error_file": error_file_url,
+            "error_file":
+                error_file_url,
 
         }
-
-
 
     # ------------------------------------------------------------
     # Create Error Report
@@ -310,14 +447,11 @@ class ExcelImporter:
 
     def create_error_report(self, failed_rows):
 
-
         wb = Workbook()
 
         ws = wb.active
 
         ws.title = "Errors"
-
-
 
         headers = [
             "Row Number"
@@ -325,10 +459,7 @@ class ExcelImporter:
             "Error Message"
         ]
 
-
         ws.append(headers)
-
-
 
         bold_font = Font(
             name="Calibri",
@@ -337,14 +468,11 @@ class ExcelImporter:
             color="FFFFFF"
         )
 
-
         red_fill = PatternFill(
             start_color="FF0000",
             end_color="FF0000",
             fill_type="solid"
         )
-
-
 
         for col_idx in range(
             1,
@@ -360,15 +488,11 @@ class ExcelImporter:
 
             cell.fill = red_fill
 
-
-
         for item in failed_rows:
-
 
             row_to_write = [
                 item["row_no"]
             ]
-
 
             for val in item["row_data"]:
 
@@ -382,24 +506,17 @@ class ExcelImporter:
 
                     row_to_write.append(val)
 
-
-
             row_to_write.append(
                 item["error"]
             )
-
 
             ws.append(
                 row_to_write
             )
 
-
-
         for col in ws.columns:
 
-
             max_len = 0
-
 
             for cell in col:
 
@@ -412,7 +529,6 @@ class ExcelImporter:
                     len(value)
                 )
 
-
             ws.column_dimensions[
                 col[0].column_letter
             ].width = max(
@@ -420,47 +536,36 @@ class ExcelImporter:
                 10
             )
 
-
-
         timestamp = datetime.now().strftime(
             "%Y%m%d_%H%M%S"
         )
 
-
         filename = (
             f"FM_Import_Errors_{timestamp}.xlsx"
         )
-
-
 
         folder_path = get_site_path(
             "private",
             "files"
         )
 
-
         os.makedirs(
             folder_path,
             exist_ok=True
         )
-
 
         file_path = os.path.join(
             folder_path,
             filename
         )
 
-
         wb.save(
             file_path
         )
 
-
-
         file_doc = frappe.new_doc(
             "File"
         )
-
 
         file_doc.file_name = filename
 
@@ -482,10 +587,8 @@ class ExcelImporter:
             self.import_doc.name
         )
 
-
         file_doc.insert(
             ignore_permissions=True
         )
-
 
         return file_doc.file_url
