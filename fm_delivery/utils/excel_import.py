@@ -9,41 +9,50 @@ from openpyxl.styles import Font, PatternFill
 
 class ExcelImporter:
 
+    # ============================================================
+    # DAILY EXCEL HEADERS
+    # ============================================================
+
     EXPECTED_HEADERS = [
         "Date",
         "State",
         "Hub_Name",
         "FHRID",
         "Agent_Name",
-        "Delivered Return",
-        "Picked Forward",
+        "DeliveredReturn",
+        "PickedForward",
         "Total",
-        "FIX Salary",
-        "FWD Rate",
-        "RTO Rate",
-        "Total Rate",
     ]
 
+    # ============================================================
+    # INITIALIZE
+    # ============================================================
+
     def __init__(self, import_doc):
+
         self.import_doc = import_doc
         self.workbook = None
         self.sheet = None
 
-    # ------------------------------------------------------------
-    # Validate File
-    # ------------------------------------------------------------
+    # ============================================================
+    # VALIDATE FILE
+    # ============================================================
 
     def validate_file(self):
 
         if not self.import_doc.import_file:
-            frappe.throw("Please attach an Excel file.")
+            frappe.throw(
+                "Please attach an Excel file."
+            )
 
         if not self.import_doc.import_file.lower().endswith(".xlsx"):
-            frappe.throw("Only .xlsx files are allowed.")
+            frappe.throw(
+                "Only .xlsx files are allowed."
+            )
 
-    # ------------------------------------------------------------
-    # Load Excel
-    # ------------------------------------------------------------
+    # ============================================================
+    # LOAD WORKBOOK
+    # ============================================================
 
     def load_workbook(self):
 
@@ -51,12 +60,12 @@ class ExcelImporter:
 
         file_doc = frappe.get_doc(
             "File",
-            {"file_url": self.import_doc.import_file}
+            {
+                "file_url": self.import_doc.import_file
+            }
         )
 
-        file_path = get_site_path(
-            file_doc.file_url.lstrip("/")
-        )
+        file_path = file_doc.get_full_path()
 
         if not os.path.exists(file_path):
             frappe.throw(
@@ -73,14 +82,16 @@ class ExcelImporter:
 
         return self.workbook, self.sheet
 
-    # ------------------------------------------------------------
-    # Validate Headers
-    # ------------------------------------------------------------
+    # ============================================================
+    # VALIDATE HEADERS
+    # ============================================================
 
     def validate_headers(self):
 
         headers = [
-            str(cell.value).strip() if cell.value else ""
+            str(cell.value).strip()
+            if cell.value is not None
+            else ""
             for cell in self.sheet[1]
         ]
 
@@ -102,9 +113,9 @@ class ExcelImporter:
                 """
             )
 
-    # ------------------------------------------------------------
-    # Number Converter
-    # ------------------------------------------------------------
+    # ============================================================
+    # NUMBER CONVERTER
+    # ============================================================
 
     def to_float(self, value):
 
@@ -115,11 +126,14 @@ class ExcelImporter:
             return float(value)
 
         except Exception:
-            return 0.0
 
-    # ------------------------------------------------------------
-    # Date Converter
-    # ------------------------------------------------------------
+            raise Exception(
+                f"Invalid number value: {value}"
+            )
+
+    # ============================================================
+    # DATE CONVERTER
+    # ============================================================
 
     def to_date(self, value):
 
@@ -131,23 +145,166 @@ class ExcelImporter:
 
         return value
 
-    # ------------------------------------------------------------
-    # Calculate Salary
-    # ------------------------------------------------------------
+    # ============================================================
+    # FIND SALARY DECLARATION
+    # ============================================================
 
-    def calculate_salary(
+    def get_salary_declaration(
         self,
-        fix_salary,
-        fwd_rate,
-        rto_rate,
-        total_rate,
-        delivered_return,
-        picked_forward,
-        total,
+        state,
+        hub_name,
+        delivery_date
     ):
 
         # --------------------------------------------------------
-        # 1. FIX Salary
+        # Find Parent Salary Declaration
+        # --------------------------------------------------------
+
+        declarations = frappe.get_all(
+            "FM Salary Declaration",
+
+            filters={
+                "from_date": ["<=", delivery_date],
+                "to_date": [">=", delivery_date],
+            },
+
+            fields=[
+                "name",
+                "from_date",
+                "to_date",
+            ],
+
+            order_by="from_date desc",
+
+            limit=2,
+        )
+
+        # --------------------------------------------------------
+        # No Salary Declaration
+        # --------------------------------------------------------
+
+        if not declarations:
+
+            raise Exception(
+                "SALARY_DECLARATION_NOT_FOUND: "
+                f"No Salary Declaration found for "
+                f"Date '{delivery_date}'. "
+                f"State '{state}', "
+                f"Hub '{hub_name}'."
+            )
+
+        # --------------------------------------------------------
+        # Multiple Salary Declarations
+        # --------------------------------------------------------
+
+        if len(declarations) > 1:
+
+            raise Exception(
+                "MULTIPLE_SALARY_DECLARATIONS: "
+                f"Multiple Salary Declarations found "
+                f"for Date '{delivery_date}'. "
+                f"Please check overlapping periods."
+            )
+
+        declaration = declarations[0]
+
+        # --------------------------------------------------------
+        # Get Parent Document
+        # --------------------------------------------------------
+
+        parent_doc = frappe.get_doc(
+            "FM Salary Declaration",
+            declaration.name
+        )
+
+        # --------------------------------------------------------
+        # Find Matching State + Hub
+        # --------------------------------------------------------
+
+        matching_rows = []
+
+        for child in parent_doc.salary_details:
+
+            child_state = str(
+                child.state or ""
+            ).strip()
+
+            child_hub = str(
+                child.hub_name or ""
+            ).strip()
+
+            if (
+                child_state.lower() == state.lower()
+                and
+                child_hub.lower() == hub_name.lower()
+            ):
+
+                matching_rows.append(
+                    child
+                )
+
+        # --------------------------------------------------------
+        # Hub Not Declared
+        # --------------------------------------------------------
+
+        if not matching_rows:
+
+            raise Exception(
+                "HUB_NOT_DECLARED: "
+                f"Hub '{hub_name}' is not declared "
+                f"in Salary Declaration for "
+                f"State '{state}' and "
+                f"Date '{delivery_date}'."
+            )
+
+        # --------------------------------------------------------
+        # Duplicate State + Hub
+        # --------------------------------------------------------
+
+        if len(matching_rows) > 1:
+
+            raise Exception(
+                "DUPLICATE_SALARY_CONFIGURATION: "
+                f"Multiple salary configurations found "
+                f"for State '{state}' and "
+                f"Hub '{hub_name}'."
+            )
+
+        return (
+            parent_doc,
+            matching_rows[0]
+        )
+
+    # ============================================================
+    # CALCULATE SALARY
+    # ============================================================
+
+    def calculate_salary(
+        self,
+        salary_row,
+        delivered_return,
+        picked_forward,
+        total
+    ):
+
+        fix_salary = self.to_float(
+            salary_row.fix_salary
+        )
+
+        fwd_rate = self.to_float(
+            salary_row.fwd_rate
+        )
+
+        rto_rate = self.to_float(
+            salary_row.rto_rate
+        )
+
+        total_rate = self.to_float(
+            salary_row.total_rate
+        )
+
+        # --------------------------------------------------------
+        # FIX SALARY
         # --------------------------------------------------------
 
         if fix_salary > 0:
@@ -155,51 +312,65 @@ class ExcelImporter:
             return fix_salary
 
         # --------------------------------------------------------
-        # 2. FWD + RTO Rate
+        # FWD + RTO RATE
         # --------------------------------------------------------
 
-        if fwd_rate > 0 or rto_rate > 0:
+        if (
+            fwd_rate > 0
+            or
+            rto_rate > 0
+        ):
 
-            salary = (
+            return (
                 picked_forward * fwd_rate
                 +
                 delivered_return * rto_rate
             )
 
-            return salary
-
         # --------------------------------------------------------
-        # 3. Total Rate
+        # TOTAL RATE
         # --------------------------------------------------------
 
         if total_rate > 0:
 
-            salary = total * total_rate
-
-            return salary
+            return (
+                total * total_rate
+            )
 
         # --------------------------------------------------------
-        # 4. No Salary Configuration
+        # NO VALID CONFIGURATION
         # --------------------------------------------------------
 
-        return 0.0
+        raise Exception(
+            "INVALID_SALARY_CONFIGURATION: "
+            f"No valid salary configuration found "
+            f"for State '{salary_row.state}', "
+            f"Hub '{salary_row.hub_name}'."
+        )
 
-    # ------------------------------------------------------------
-    # Import Data
-    # ------------------------------------------------------------
+    # ============================================================
+    # IMPORT DATA
+    # ============================================================
 
     def import_data(self):
 
         attempted = 0
         imported = 0
+        updated = 0
         failed = 0
 
         failed_rows = []
 
         headers = [
-            str(cell.value).strip() if cell.value else ""
+            str(cell.value).strip()
+            if cell.value is not None
+            else ""
             for cell in self.sheet[1]
         ]
+
+        # --------------------------------------------------------
+        # Process Excel Rows
+        # --------------------------------------------------------
 
         for row_no, values in enumerate(
             self.sheet.iter_rows(
@@ -209,7 +380,8 @@ class ExcelImporter:
             start=2
         ):
 
-            # Skip empty rows
+            # Skip completely empty rows
+
             if not any(values):
                 continue
 
@@ -218,65 +390,106 @@ class ExcelImporter:
             try:
 
                 # ------------------------------------------------
-                # Convert Excel row into dictionary
+                # Convert Row To Dictionary
                 # ------------------------------------------------
 
                 row = {
-                    headers[i]: values[i]
-                    if i < len(values)
-                    else None
+                    headers[i]:
+                        values[i]
+                        if i < len(values)
+                        else None
 
-                    for i in range(len(headers))
+                    for i in range(
+                        len(headers)
+                    )
                 }
 
                 # ------------------------------------------------
-                # Basic values
+                # Read Daily Data
                 # ------------------------------------------------
 
+                delivery_date = self.to_date(
+                    row.get("Date")
+                )
+
+                state = str(
+                    row.get("State") or ""
+                ).strip()
+
+                hub_name = str(
+                    row.get("Hub_Name") or ""
+                ).strip()
+
+                fhr_id = str(
+                    row.get("FHRID") or ""
+                ).strip()
+
+                agent_name = str(
+                    row.get("Agent_Name") or ""
+                ).strip()
+
                 delivered_return = self.to_float(
-                    row.get("Delivered Return")
+                    row.get("DeliveredReturn")
                 )
 
                 picked_forward = self.to_float(
-                    row.get("Picked Forward")
+                    row.get("PickedForward")
                 )
 
                 total = self.to_float(
                     row.get("Total")
                 )
 
-                fix_salary = self.to_float(
-                    row.get("FIX Salary")
-                )
+                # ------------------------------------------------
+                # Required Fields
+                # ------------------------------------------------
 
-                fwd_rate = self.to_float(
-                    row.get("FWD Rate")
-                )
+                if not delivery_date:
+                    raise Exception(
+                        "MISSING_DATE: Date is required."
+                    )
 
-                rto_rate = self.to_float(
-                    row.get("RTO Rate")
-                )
+                if not state:
+                    raise Exception(
+                        "MISSING_STATE: State is required."
+                    )
 
-                total_rate = self.to_float(
-                    row.get("Total Rate")
+                if not hub_name:
+                    raise Exception(
+                        "MISSING_HUB: Hub_Name is required."
+                    )
+
+                if not fhr_id:
+                    raise Exception(
+                        "MISSING_FHRID: FHRID is required."
+                    )
+
+                # ------------------------------------------------
+                # FIND SALARY DECLARATION
+                # ------------------------------------------------
+
+                (
+                    salary_declaration,
+                    salary_row
+                ) = self.get_salary_declaration(
+                    state=state,
+                    hub_name=hub_name,
+                    delivery_date=delivery_date
                 )
 
                 # ------------------------------------------------
-                # Calculate Salary
+                # CALCULATE SALARY
                 # ------------------------------------------------
 
                 salary = self.calculate_salary(
-                    fix_salary=fix_salary,
-                    fwd_rate=fwd_rate,
-                    rto_rate=rto_rate,
-                    total_rate=total_rate,
+                    salary_row=salary_row,
                     delivered_return=delivered_return,
                     picked_forward=picked_forward,
-                    total=total,
+                    total=total
                 )
 
                 # ------------------------------------------------
-                # Calculate RCPS
+                # CALCULATE RCPS
                 # ------------------------------------------------
 
                 if total > 0:
@@ -288,43 +501,46 @@ class ExcelImporter:
                     rcps = 0.0
 
                 # ------------------------------------------------
-                # Create Frappe Document
+                # CHECK EXISTING DAILY RECORD
+                # Date + FHRID
                 # ------------------------------------------------
 
-                doc = frappe.new_doc(
-                    "FM Delivery Data"
+                existing_name = frappe.db.get_value(
+                    "FM Delivery Data",
+                    {
+                        "date": delivery_date,
+                        "fhr_id": fhr_id,
+                    },
+                    "name"
                 )
 
-                doc.update(
-                    {
+                # ------------------------------------------------
+                # UPDATE EXISTING
+                # ------------------------------------------------
 
-                        # ----------------------------
-                        # Basic Information
-                        # ----------------------------
+                if existing_name:
 
-                        "date": self.to_date(
-                            row.get("Date")
-                        ),
+                    delivery_doc = frappe.get_doc(
+                        "FM Delivery Data",
+                        existing_name
+                    )
 
-                        "state": str(
-                            row.get("State") or ""
-                        ).strip(),
+                    delivery_doc.update({
 
-                        "hub_name": str(
-                            row.get("Hub_Name") or ""
-                        ).strip(),
+                        "date":
+                            delivery_date,
 
-                        "rider_name": str(
-                            row.get("Agent_Name") or ""
-                        ).strip(),
+                        "state":
+                            state,
 
-                        "fhr_id": str(
-                            row.get("FHRID") or ""
-                        ).strip(),
+                        "hub_name":
+                            hub_name,
 
-                        # ----------------------------
-                        # Shipment Information
-                        # ----------------------------
+                        "fhr_id":
+                            fhr_id,
+
+                        "rider_name":
+                            agent_name,
 
                         "return_shipment":
                             delivered_return,
@@ -335,63 +551,183 @@ class ExcelImporter:
                         "total_shipment":
                             total,
 
-                        # ----------------------------
-                        # Salary Configuration
-                        # ----------------------------
+                        "salary":
+                            salary,
 
-                        "fix_salary":
-                            fix_salary,
+                        "rcps":
+                            rcps,
+                    })
 
-                        "fwd_rate":
-                            fwd_rate,
+                    delivery_doc.save(
+                        ignore_permissions=True
+                    )
 
-                        "rto_rate":
-                            rto_rate,
+                    updated += 1
 
-                        "total_rate":
-                            total_rate,
+                # ------------------------------------------------
+                # CREATE NEW
+                # ------------------------------------------------
 
-                        # ----------------------------
-                        # Calculated Values
-                        # ----------------------------
+                else:
+
+                    delivery_doc = frappe.new_doc(
+                        "FM Delivery Data"
+                    )
+
+                    delivery_doc.update({
+
+                        "date":
+                            delivery_date,
+
+                        "state":
+                            state,
+
+                        "hub_name":
+                            hub_name,
+
+                        "fhr_id":
+                            fhr_id,
+
+                        "rider_name":
+                            agent_name,
+
+                        "return_shipment":
+                            delivered_return,
+
+                        "forward_shipment":
+                            picked_forward,
+
+                        "total_shipment":
+                            total,
 
                         "salary":
                             salary,
 
                         "rcps":
                             rcps,
-                    }
-                )
+                    })
 
-                # ------------------------------------------------
-                # Insert
-                # ------------------------------------------------
+                    delivery_doc.insert(
+                        ignore_permissions=True
+                    )
 
-                doc.insert(
-                    ignore_permissions=True
-                )
+                    imported += 1
 
-                imported += 1
-
-            except Exception:
+            except Exception as e:
 
                 failed += 1
 
-                error_msg = frappe.get_traceback()
+                error_message = str(e)
 
-                failed_rows.append(
-                    {
-                        "row_no": row_no,
-                        "row_data": values,
-                        "error":
-                            error_msg.strip().split("\n")[-1],
-                    }
+                # ------------------------------------------------
+                # Determine Error Type
+                # ------------------------------------------------
+
+                if error_message.startswith(
+                    "HUB_NOT_DECLARED:"
+                ):
+
+                    error_type = "HUB NOT DECLARED"
+
+                elif error_message.startswith(
+                    "SALARY_DECLARATION_NOT_FOUND:"
+                ):
+
+                    error_type = "SALARY DECLARATION NOT FOUND"
+
+                elif error_message.startswith(
+                    "MULTIPLE_SALARY_DECLARATIONS:"
+                ):
+
+                    error_type = "MULTIPLE SALARY DECLARATIONS"
+
+                elif error_message.startswith(
+                    "DUPLICATE_SALARY_CONFIGURATION:"
+                ):
+
+                    error_type = "DUPLICATE SALARY CONFIGURATION"
+
+                elif error_message.startswith(
+                    "INVALID_SALARY_CONFIGURATION:"
+                ):
+
+                    error_type = "INVALID SALARY CONFIGURATION"
+
+                elif error_message.startswith(
+                    "MISSING_DATE:"
+                ):
+
+                    error_type = "MISSING DATE"
+
+                elif error_message.startswith(
+                    "MISSING_STATE:"
+                ):
+
+                    error_type = "MISSING STATE"
+
+                elif error_message.startswith(
+                    "MISSING_HUB:"
+                ):
+
+                    error_type = "MISSING HUB"
+
+                elif error_message.startswith(
+                    "MISSING_FHRID:"
+                ):
+
+                    error_type = "MISSING FHRID"
+
+                elif error_message.startswith(
+                    "Invalid number value:"
+                ):
+
+                    error_type = "INVALID NUMBER"
+
+                else:
+
+                    error_type = "IMPORT ERROR"
+
+                # ------------------------------------------------
+                # Clean Error Message
+                # ------------------------------------------------
+
+                clean_message = (
+                    error_message
+                    .split(":", 1)[1]
+                    .strip()
+                    if ":" in error_message
+                    else error_message
                 )
 
+                failed_rows.append({
+
+                    "row_no":
+                        row_no,
+
+                    "row_data":
+                        values,
+
+                    "error_type":
+                        error_type,
+
+                    "error":
+                        clean_message,
+
+                })
+
+                # Log technical traceback
                 frappe.log_error(
                     title=f"FM Delivery Import Row {row_no}",
-                    message=error_msg
+                    message=frappe.get_traceback()
                 )
+
+                # IMPORTANT:
+                # Do NOT frappe.throw here.
+                # This allows remaining rows to continue.
+
+        # --------------------------------------------------------
+        # Commit
+        # --------------------------------------------------------
 
         frappe.db.commit()
 
@@ -411,7 +747,9 @@ class ExcelImporter:
         # Update Import Document
         # --------------------------------------------------------
 
-        self.import_doc.imported_rows = imported
+        self.import_doc.imported_rows = (
+            imported + updated
+        )
 
         self.import_doc.failed_rows = failed
 
@@ -419,33 +757,56 @@ class ExcelImporter:
 
         if error_file_url:
 
-            self.import_doc.error_file = error_file_url
+            self.import_doc.error_file = (
+                error_file_url
+            )
 
         self.import_doc.save(
             ignore_permissions=True
         )
 
+        # --------------------------------------------------------
+        # Return Summary
+        # --------------------------------------------------------
+
         return {
 
-            "attempted": attempted,
+            "attempted":
+                attempted,
 
-            "imported": imported,
+            "imported":
+                imported,
 
-            "failed": failed,
+            "updated":
+                updated,
+
+            "failed":
+                failed,
 
             "difference":
-                attempted - (imported + failed),
+                attempted
+                -
+                (
+                    imported
+                    +
+                    updated
+                    +
+                    failed
+                ),
 
             "error_file":
                 error_file_url,
 
         }
 
-    # ------------------------------------------------------------
-    # Create Error Report
-    # ------------------------------------------------------------
+    # ============================================================
+    # CREATE ERROR REPORT
+    # ============================================================
 
-    def create_error_report(self, failed_rows):
+    def create_error_report(
+        self,
+        failed_rows
+    ):
 
         wb = Workbook()
 
@@ -453,13 +814,22 @@ class ExcelImporter:
 
         ws.title = "Errors"
 
+        # --------------------------------------------------------
+        # Error Report Headers
+        # --------------------------------------------------------
+
         headers = [
             "Row Number"
         ] + self.EXPECTED_HEADERS + [
+            "Error Type",
             "Error Message"
         ]
 
         ws.append(headers)
+
+        # --------------------------------------------------------
+        # Header Styling
+        # --------------------------------------------------------
 
         bold_font = Font(
             name="Calibri",
@@ -485,8 +855,11 @@ class ExcelImporter:
             )
 
             cell.font = bold_font
-
             cell.fill = red_fill
+
+        # --------------------------------------------------------
+        # Error Rows
+        # --------------------------------------------------------
 
         for item in failed_rows:
 
@@ -494,17 +867,28 @@ class ExcelImporter:
                 item["row_no"]
             ]
 
-            for val in item["row_data"]:
+            for value in item["row_data"]:
 
-                if isinstance(val, datetime):
+                if isinstance(
+                    value,
+                    datetime
+                ):
 
                     row_to_write.append(
-                        val.strftime("%Y-%m-%d")
+                        value.strftime(
+                            "%Y-%m-%d"
+                        )
                     )
 
                 else:
 
-                    row_to_write.append(val)
+                    row_to_write.append(
+                        value
+                    )
+
+            row_to_write.append(
+                item["error_type"]
+            )
 
             row_to_write.append(
                 item["error"]
@@ -514,27 +898,35 @@ class ExcelImporter:
                 row_to_write
             )
 
-        for col in ws.columns:
+        # --------------------------------------------------------
+        # Column Width
+        # --------------------------------------------------------
 
-            max_len = 0
+        for column in ws.columns:
 
-            for cell in col:
+            max_length = 0
+
+            for cell in column:
 
                 value = str(
                     cell.value or ""
                 )
 
-                max_len = max(
-                    max_len,
+                max_length = max(
+                    max_length,
                     len(value)
                 )
 
             ws.column_dimensions[
-                col[0].column_letter
-            ].width = max(
-                max_len + 3,
-                10
+                column[0].column_letter
+            ].width = min(
+                max(max_length + 3, 10),
+                60
             )
+
+        # --------------------------------------------------------
+        # Save Error File
+        # --------------------------------------------------------
 
         timestamp = datetime.now().strftime(
             "%Y%m%d_%H%M%S"
@@ -563,6 +955,10 @@ class ExcelImporter:
             file_path
         )
 
+        # --------------------------------------------------------
+        # Create Frappe File
+        # --------------------------------------------------------
+
         file_doc = frappe.new_doc(
             "File"
         )
@@ -572,7 +968,8 @@ class ExcelImporter:
         file_doc.is_private = 1
 
         file_doc.content_type = (
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
         )
 
         file_doc.file_url = (
