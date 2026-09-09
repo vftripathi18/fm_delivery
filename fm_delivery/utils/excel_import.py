@@ -7,6 +7,10 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 
 
+# ============================================================
+# FM DELIVERY EXCEL IMPORTER
+# ============================================================
+
 class ExcelImporter:
 
     # ============================================================
@@ -19,9 +23,10 @@ class ExcelImporter:
         "Hub_Name",
         "FHRID",
         "Agent_Name",
+        "tripsheetId",
         "DeliveredReturn",
         "PickedForward",
-        "Total",
+        "Total"
     ]
 
     # ============================================================
@@ -41,11 +46,13 @@ class ExcelImporter:
     def validate_file(self):
 
         if not self.import_doc.import_file:
+
             frappe.throw(
                 "Please attach an Excel file."
             )
 
         if not self.import_doc.import_file.lower().endswith(".xlsx"):
+
             frappe.throw(
                 "Only .xlsx files are allowed."
             )
@@ -68,6 +75,7 @@ class ExcelImporter:
         file_path = file_doc.get_full_path()
 
         if not os.path.exists(file_path):
+
             frappe.throw(
                 f"File not found: {file_path}"
             )
@@ -120,9 +128,11 @@ class ExcelImporter:
     def to_float(self, value):
 
         if value in (None, "", "NULL"):
+
             return 0.0
 
         try:
+
             return float(value)
 
         except Exception:
@@ -138,9 +148,11 @@ class ExcelImporter:
     def to_date(self, value):
 
         if not value:
+
             return None
 
         if isinstance(value, datetime):
+
             return value.date()
 
         return value
@@ -358,6 +370,7 @@ class ExcelImporter:
         imported = 0
         updated = 0
         failed = 0
+        duplicates = 0
 
         failed_rows = []
 
@@ -367,6 +380,15 @@ class ExcelImporter:
             else ""
             for cell in self.sheet[1]
         ]
+
+        # --------------------------------------------------------
+        # Track duplicates inside the SAME Excel file
+        #
+        # Key:
+        # Date + FHRID + TripSheet ID
+        # --------------------------------------------------------
+
+        processed_keys = set()
 
         # --------------------------------------------------------
         # Process Excel Rows
@@ -380,9 +402,12 @@ class ExcelImporter:
             start=2
         ):
 
+            # ----------------------------------------------------
             # Skip completely empty rows
+            # ----------------------------------------------------
 
             if not any(values):
+
                 continue
 
             attempted += 1
@@ -428,6 +453,10 @@ class ExcelImporter:
                     row.get("Agent_Name") or ""
                 ).strip()
 
+                tripsheet_id = str(
+                    row.get("tripsheetId") or ""
+                ).strip()
+
                 delivered_return = self.to_float(
                     row.get("DeliveredReturn")
                 )
@@ -445,24 +474,50 @@ class ExcelImporter:
                 # ------------------------------------------------
 
                 if not delivery_date:
+
                     raise Exception(
                         "MISSING_DATE: Date is required."
                     )
 
                 if not state:
+
                     raise Exception(
                         "MISSING_STATE: State is required."
                     )
 
                 if not hub_name:
+
                     raise Exception(
                         "MISSING_HUB: Hub_Name is required."
                     )
 
                 if not fhr_id:
+
                     raise Exception(
                         "MISSING_FHRID: FHRID is required."
                     )
+
+                if not tripsheet_id:
+
+                    raise Exception(
+                        "MISSING_TRIPSHEETID: "
+                        "tripsheetId is required."
+                    )
+
+                # ------------------------------------------------
+                # DUPLICATE KEY
+                #
+                # Same:
+                # Date + FHRID + TripSheet ID
+                #
+                # means same allocation.
+                # ------------------------------------------------
+
+                duplicate_key = (
+                    str(delivery_date),
+                    fhr_id.lower(),
+                    tripsheet_id.lower()
+                )
 
                 # ------------------------------------------------
                 # FIND SALARY DECLARATION
@@ -500,22 +555,38 @@ class ExcelImporter:
 
                     rcps = 0.0
 
-                # ------------------------------------------------
+                # =================================================
                 # CHECK EXISTING DAILY RECORD
-                # Date + FHRID
-                # ------------------------------------------------
+                #
+                # UNIQUE LOGIC:
+                #
+                # Date
+                # +
+                # FHRID
+                # +
+                # TripSheet ID
+                #
+                # IMPORTANT:
+                #
+                # Same FHRID + different TripSheet
+                # = DIFFERENT RECORD
+                #
+                # Same FHRID + same TripSheet
+                # = SAME RECORD / UPDATE
+                # =================================================
 
                 existing_name = frappe.db.get_value(
                     "FM Delivery Data",
                     {
                         "date": delivery_date,
                         "fhr_id": fhr_id,
+                        "tripsheet_id": tripsheet_id,
                     },
                     "name"
                 )
 
                 # ------------------------------------------------
-                # UPDATE EXISTING
+                # UPDATE EXISTING RECORD
                 # ------------------------------------------------
 
                 if existing_name:
@@ -542,6 +613,9 @@ class ExcelImporter:
                         "rider_name":
                             agent_name,
 
+                        "tripsheet_id":
+                            tripsheet_id,
+
                         "return_shipment":
                             delivered_return,
 
@@ -556,6 +630,7 @@ class ExcelImporter:
 
                         "rcps":
                             rcps,
+
                     })
 
                     delivery_doc.save(
@@ -564,8 +639,11 @@ class ExcelImporter:
 
                     updated += 1
 
+                    # Existing DB record is not counted
+                    # as an Excel duplicate.
+
                 # ------------------------------------------------
-                # CREATE NEW
+                # CREATE NEW RECORD
                 # ------------------------------------------------
 
                 else:
@@ -591,6 +669,9 @@ class ExcelImporter:
                         "rider_name":
                             agent_name,
 
+                        "tripsheet_id":
+                            tripsheet_id,
+
                         "return_shipment":
                             delivered_return,
 
@@ -605,6 +686,7 @@ class ExcelImporter:
 
                         "rcps":
                             rcps,
+
                     })
 
                     delivery_doc.insert(
@@ -612,6 +694,23 @@ class ExcelImporter:
                     )
 
                     imported += 1
+
+                # ------------------------------------------------
+                # Mark this combination as processed
+                #
+                # This is useful for tracking exact duplicates
+                # inside the uploaded Excel.
+                # ------------------------------------------------
+
+                if duplicate_key in processed_keys:
+
+                    duplicates += 1
+
+                else:
+
+                    processed_keys.add(
+                        duplicate_key
+                    )
 
             except Exception as e:
 
@@ -633,25 +732,33 @@ class ExcelImporter:
                     "SALARY_DECLARATION_NOT_FOUND:"
                 ):
 
-                    error_type = "SALARY DECLARATION NOT FOUND"
+                    error_type = (
+                        "SALARY DECLARATION NOT FOUND"
+                    )
 
                 elif error_message.startswith(
                     "MULTIPLE_SALARY_DECLARATIONS:"
                 ):
 
-                    error_type = "MULTIPLE SALARY DECLARATIONS"
+                    error_type = (
+                        "MULTIPLE SALARY DECLARATIONS"
+                    )
 
                 elif error_message.startswith(
                     "DUPLICATE_SALARY_CONFIGURATION:"
                 ):
 
-                    error_type = "DUPLICATE SALARY CONFIGURATION"
+                    error_type = (
+                        "DUPLICATE SALARY CONFIGURATION"
+                    )
 
                 elif error_message.startswith(
                     "INVALID_SALARY_CONFIGURATION:"
                 ):
 
-                    error_type = "INVALID SALARY CONFIGURATION"
+                    error_type = (
+                        "INVALID SALARY CONFIGURATION"
+                    )
 
                 elif error_message.startswith(
                     "MISSING_DATE:"
@@ -676,6 +783,14 @@ class ExcelImporter:
                 ):
 
                     error_type = "MISSING FHRID"
+
+                elif error_message.startswith(
+                    "MISSING_TRIPSHEETID:"
+                ):
+
+                    error_type = (
+                        "MISSING TRIPSHEET ID"
+                    )
 
                 elif error_message.startswith(
                     "Invalid number value:"
@@ -715,7 +830,10 @@ class ExcelImporter:
 
                 })
 
+                # ------------------------------------------------
                 # Log technical traceback
+                # ------------------------------------------------
+
                 frappe.log_error(
                     title=f"FM Delivery Import Row {row_no}",
                     message=frappe.get_traceback()
@@ -723,17 +841,17 @@ class ExcelImporter:
 
                 # IMPORTANT:
                 # Do NOT frappe.throw here.
-                # This allows remaining rows to continue.
+                # Remaining rows continue.
 
-        # --------------------------------------------------------
-        # Commit
-        # --------------------------------------------------------
+        # ========================================================
+        # COMMIT
+        # ========================================================
 
         frappe.db.commit()
 
-        # --------------------------------------------------------
-        # Error Report
-        # --------------------------------------------------------
+        # ========================================================
+        # ERROR REPORT
+        # ========================================================
 
         error_file_url = None
 
@@ -743,9 +861,9 @@ class ExcelImporter:
                 failed_rows
             )
 
-        # --------------------------------------------------------
-        # Update Import Document
-        # --------------------------------------------------------
+        # ========================================================
+        # UPDATE IMPORT DOCUMENT
+        # ========================================================
 
         self.import_doc.imported_rows = (
             imported + updated
@@ -765,9 +883,9 @@ class ExcelImporter:
             ignore_permissions=True
         )
 
-        # --------------------------------------------------------
-        # Return Summary
-        # --------------------------------------------------------
+        # ========================================================
+        # RETURN SUMMARY
+        # ========================================================
 
         return {
 
@@ -782,6 +900,9 @@ class ExcelImporter:
 
             "failed":
                 failed,
+
+            "duplicates":
+                duplicates,
 
             "difference":
                 attempted

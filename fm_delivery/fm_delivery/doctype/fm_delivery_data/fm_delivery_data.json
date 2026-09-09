@@ -12,6 +12,7 @@
   "hub_name",
   "rider_name",
   "fhr_id",
+  "tripsheet_id",
   "return_shipment",
   "forward_shipment",
   "total_shipment",
@@ -104,13 +105,18 @@
    "fieldtype": "Float",
    "label": "RCPS",
    "read_only": 1
+  },
+  {
+   "fieldname": "tripsheet_id",
+   "fieldtype": "Data",
+   "label": "TripSheet ID"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-10 11:54:46.945168",
- "modified_by": "mstripathi100@gmail.com",
+ "modified": "2026-09-09 12:27:16.110919",
+ "modified_by": "Administrator",
  "module": "FM Delivery",
  "name": "FM Delivery Data",
  "naming_rule": "Autoincrement",
