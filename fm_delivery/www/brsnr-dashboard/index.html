@@ -1,0 +1,352 @@
+{% extends "templates/web.html" %}
+
+{% block title %}BRSNR Command Center{% endblock %}
+
+{% block head_include %}
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>
+  /* Apply the saved theme before first paint. Light is the default; the OS preference is never used. */
+  (function () {
+    var t = "light";
+    try {
+      var saved = localStorage.getItem("brsnr_theme");
+      if (saved === "dark" || saved === "light") t = saved;
+    } catch (e) { /* storage unavailable: stay light */ }
+    document.documentElement.setAttribute("data-brsnr-theme", t);
+  })();
+</script>
+<link rel="stylesheet" href="/assets/fm_delivery/css/brsnr-dashboard.css">
+{% endblock %}
+
+{% block page_content %}
+
+<!-- Icon sprite (hidden; icons are sized by .brsnr-ico) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-overview" viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></symbol>
+    <symbol id="i-shipments" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"/></symbol>
+    <symbol id="i-pending" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-new" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></symbol>
+    <symbol id="i-cleared" viewBox="0 0 24 24"><path d="M22 11.1V12a10 10 0 1 1-6-9.2M22 4L12 14l-3-3"/></symbol>
+    <symbol id="i-risk" viewBox="0 0 24 24"><path d="M12 3l10 18H2zM12 10v5M12 18h.01"/></symbol>
+    <symbol id="i-analytics" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></symbol>
+    <symbol id="i-hubs" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v6M12 15v6M3 12h6M15 12h6"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/></symbol>
+    <symbol id="i-reports" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h8"/></symbol>
+    <symbol id="i-profile" viewBox="0 0 24 24"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
+    <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></symbol>
+  </defs>
+</svg>
+
+<div class="brsnr-app" id="brsnr-app">
+
+  <!-- ================= SIDEBAR ================= -->
+  <aside class="brsnr-sidebar" id="brsnr-sidebar" aria-label="Primary">
+    <div class="brsnr-brand">
+      <div class="brsnr-brand-mark">B</div>
+      <div class="brsnr-brand-text">
+        <strong>BRSNR</strong>
+        <span>Command Center</span>
+      </div>
+      <button type="button" class="brsnr-icon-btn brsnr-collapse-btn" id="brsnr-collapse" title="Collapse sidebar" aria-label="Collapse sidebar">
+        <svg class="brsnr-ico"><use href="#i-collapse"/></svg>
+      </button>
+    </div>
+
+    <nav class="brsnr-nav" id="brsnr-nav">
+      <div class="brsnr-nav-label">Workspace</div>
+      <button type="button" class="brsnr-nav-item" data-section="overview" title="Overview"><svg class="brsnr-ico"><use href="#i-overview"/></svg><span class="brsnr-nav-text">Overview</span></button>
+      <button type="button" class="brsnr-nav-item" data-section="shipments" title="Live Shipments"><svg class="brsnr-ico"><use href="#i-shipments"/></svg><span class="brsnr-nav-text">Live Shipments</span></button>
+      <button type="button" class="brsnr-nav-item" data-section="pending" title="Pending"><svg class="brsnr-ico"><use href="#i-pending"/></svg><span class="brsnr-nav-text">Pending</span><span class="brsnr-nav-count" data-count="pending"></span></button>
+      <button type="button" class="brsnr-nav-item" data-section="new" title="New"><svg class="brsnr-ico"><use href="#i-new"/></svg><span class="brsnr-nav-text">New</span><span class="brsnr-nav-count" data-count="new"></span></button>
+      <button type="button" class="brsnr-nav-item" data-section="cleared" title="Cleared"><svg class="brsnr-ico"><use href="#i-cleared"/></svg><span class="brsnr-nav-text">Cleared</span><span class="brsnr-nav-count" data-count="cleared"></span></button>
+      <button type="button" class="brsnr-nav-item" data-section="risk" title="Risk Monitor"><svg class="brsnr-ico"><use href="#i-risk"/></svg><span class="brsnr-nav-text">Risk Monitor</span><span class="brsnr-nav-count" data-tone="loss" data-count="loss"></span></button>
+
+      <div class="brsnr-nav-label">Insights</div>
+      <button type="button" class="brsnr-nav-item" data-section="analytics" title="Analytics"><svg class="brsnr-ico"><use href="#i-analytics"/></svg><span class="brsnr-nav-text">Analytics</span></button>
+      <button type="button" class="brsnr-nav-item" data-section="hubperf" title="Hub Performance"><svg class="brsnr-ico"><use href="#i-hubs"/></svg><span class="brsnr-nav-text">Hub Performance</span></button>
+      <button type="button" class="brsnr-nav-item" data-section="history" title="History"><svg class="brsnr-ico"><use href="#i-history"/></svg><span class="brsnr-nav-text">History</span></button>
+
+      <div class="brsnr-nav-label">System</div>
+      <button type="button" class="brsnr-nav-item" data-section="reports" title="Reports"><svg class="brsnr-ico"><use href="#i-reports"/></svg><span class="brsnr-nav-text">Reports</span></button>
+      <button type="button" class="brsnr-nav-item" data-section="profile" title="Profile"><svg class="brsnr-ico"><use href="#i-profile"/></svg><span class="brsnr-nav-text">Profile</span></button>
+    </nav>
+
+    <div class="brsnr-sidebar-foot">
+      <div class="brsnr-access-chip" id="brsnr-access-chip">
+        <strong id="brsnr-access-role">—</strong>
+        <span id="brsnr-access-scope">—</span>
+      </div>
+    </div>
+  </aside>
+  <div class="brsnr-backdrop" id="brsnr-backdrop"></div>
+
+  <!-- ================= MAIN ================= -->
+  <div class="brsnr-main" id="brsnr-main">
+
+    <header class="brsnr-topbar">
+      <button type="button" class="brsnr-icon-btn brsnr-menu-btn" id="brsnr-menu" aria-label="Open menu"><svg class="brsnr-ico"><use href="#i-menu"/></svg></button>
+
+      <div class="brsnr-heading">
+        <span class="brsnr-eyebrow">BRSNR Command Center</span>
+        <h1 id="brsnr-title">Overview</h1>
+      </div>
+
+      <div class="brsnr-top-meta">
+        <div class="brsnr-chip" title="Snapshot being displayed">
+          <span class="brsnr-chip-k">BRSNR date</span><strong id="brsnr-snapshot-date">—</strong>
+        </div>
+        <div class="brsnr-chip brsnr-chip-live" id="brsnr-live" data-state="connecting">
+          <span class="brsnr-dot"></span><strong id="brsnr-live-text">Connecting</strong>
+        </div>
+        <div class="brsnr-chip brsnr-hide-sm" title="Last successful refresh">
+          <span class="brsnr-chip-k">Refreshed</span><strong id="brsnr-last-refresh">—</strong>
+        </div>
+      </div>
+
+      <div class="brsnr-top-actions">
+        <button type="button" class="brsnr-icon-btn" id="brsnr-refresh-top" title="Refresh" aria-label="Refresh"><svg class="brsnr-ico"><use href="#i-refresh"/></svg></button>
+
+        <button type="button" class="brsnr-theme-toggle" id="brsnr-theme" role="switch" aria-checked="false" aria-label="Toggle light / dark theme">
+          <span class="brsnr-theme-opt" data-theme-opt="light"><svg class="brsnr-ico"><use href="#i-sun"/></svg><span>Light</span></span>
+          <span class="brsnr-theme-opt" data-theme-opt="dark"><svg class="brsnr-ico"><use href="#i-moon"/></svg><span>Dark</span></span>
+        </button>
+
+        <div class="brsnr-user">
+          <button type="button" class="brsnr-user-btn" id="brsnr-user-btn" aria-haspopup="true" aria-expanded="false">
+            <span class="brsnr-avatar" id="brsnr-avatar">?</span>
+            <span class="brsnr-user-text brsnr-hide-sm"><strong id="brsnr-user-name">Loading…</strong><span id="brsnr-user-role">—</span></span>
+          </button>
+          <div class="brsnr-popover" id="brsnr-user-pop" hidden>
+            <div class="brsnr-pop-name" id="brsnr-pop-name">—</div>
+            <div class="brsnr-pop-line" id="brsnr-pop-email">—</div>
+            <div class="brsnr-pop-line"><span class="brsnr-badge" data-tone="info" id="brsnr-pop-role">—</span></div>
+            <div class="brsnr-pop-hubs" id="brsnr-pop-hubs"></div>
+            <button type="button" class="brsnr-btn brsnr-btn-ghost brsnr-btn-block" id="brsnr-logout"><svg class="brsnr-ico"><use href="#i-logout"/></svg>Sign out</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- error / session banner -->
+    <div class="brsnr-banner" id="brsnr-banner" hidden role="alert">
+      <span id="brsnr-banner-text"></span>
+      <button type="button" class="brsnr-btn brsnr-btn-sm" id="brsnr-banner-retry">Retry</button>
+    </div>
+
+    <!-- ========== SHARED FILTER BAR ========== -->
+    <section class="brsnr-filterbar" id="brsnr-filterbar" aria-label="Filters">
+      <div class="brsnr-quick" id="brsnr-quick">
+        <button type="button" class="brsnr-pill" data-range="today">Today</button>
+        <button type="button" class="brsnr-pill" data-range="yesterday">Yesterday</button>
+        <button type="button" class="brsnr-pill" data-range="7d">Last 7 Days</button>
+        <button type="button" class="brsnr-pill" data-range="30d">Last 30 Days</button>
+        <button type="button" class="brsnr-pill" data-range="month">This Month</button>
+        <button type="button" class="brsnr-pill" data-range="prev-month">Previous Month</button>
+        <button type="button" class="brsnr-pill" data-range="custom">Custom</button>
+      </div>
+      <div class="brsnr-filter-row">
+        <label class="brsnr-field"><span>From</span><input type="date" id="brsnr-from"></label>
+        <label class="brsnr-field"><span>To</span><input type="date" id="brsnr-to"></label>
+        <label class="brsnr-field"><span>Hub</span><select id="brsnr-hub"><option value="">All hubs</option></select></label>
+        <label class="brsnr-field"><span>BRSNR status</span>
+          <select id="brsnr-status"><option value="">All</option><option>New</option><option>Pending</option><option>Cleared</option></select></label>
+        <label class="brsnr-field"><span>Clearance</span>
+          <select id="brsnr-clearance"><option value="">All</option><option>Pending</option><option>Due Soon</option><option>Cleared</option><option value="Loss">Overdue / Loss</option></select></label>
+        <label class="brsnr-field brsnr-field-grow"><span>Search shipment</span>
+          <span class="brsnr-input-ico"><svg class="brsnr-ico"><use href="#i-search"/></svg><input type="search" id="brsnr-search" placeholder="Shipment, Casper ID, partner, hub" autocomplete="off"></span></label>
+        <div class="brsnr-filter-actions">
+          <button type="button" class="brsnr-btn brsnr-btn-primary" id="brsnr-apply">Apply</button>
+          <button type="button" class="brsnr-btn" id="brsnr-reset">Reset</button>
+          <button type="button" class="brsnr-btn" id="brsnr-refresh">Refresh</button>
+        </div>
+      </div>
+    </section>
+
+    <main class="brsnr-content" id="brsnr-content">
+
+      <!-- ===== OVERVIEW ===== -->
+      <section class="brsnr-section" id="brsnr-sec-overview" data-section="overview">
+        <div class="brsnr-kpi-grid" id="brsnr-kpis"></div>
+        <div class="brsnr-grid brsnr-grid-2-1">
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>New · Pending · Cleared trend</h3></div><div class="brsnr-chart"><canvas id="brsnr-ch-trend"></canvas></div></div>
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Risk distribution</h3></div><div class="brsnr-chart"><canvas id="brsnr-ch-risk"></canvas></div></div>
+        </div>
+        <div class="brsnr-grid brsnr-grid-1-1">
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Needs attention</h3><button type="button" class="brsnr-link" data-goto="risk">Risk Monitor</button></div><div id="brsnr-ov-attention" class="brsnr-stack"></div></div>
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Hub ranking</h3><button type="button" class="brsnr-link" data-goto="hubperf">All hubs</button></div><div id="brsnr-ov-hubs" class="brsnr-stack"></div></div>
+        </div>
+      </section>
+
+      <!-- ===== LIVE SHIPMENTS ===== -->
+      <section class="brsnr-section" id="brsnr-sec-shipments" data-section="shipments" hidden>
+        <div class="brsnr-panel">
+          <div class="brsnr-panel-head"><h3>Live shipments</h3><span class="brsnr-muted" id="brsnr-ship-count"></span></div>
+          <div class="brsnr-table-wrap">
+            <table class="brsnr-table" id="brsnr-tbl-shipments">
+              <thead><tr>
+                <th data-sort="shipment_id">Shipment ID</th><th data-sort="source">Source</th><th data-sort="current_hub">Current Hub</th>
+                <th>Partner</th><th data-sort="brsnr_status">BRSNR</th><th data-sort="clearance_status">Clearance</th><th>Risk</th>
+                <th data-sort="aging" class="brsnr-num">Aging</th><th data-sort="days_remaining" class="brsnr-num">Days left</th>
+                <th data-sort="total_price" class="brsnr-num">Total price</th><th>BRSNR date</th><th></th>
+              </tr></thead>
+              <tbody id="brsnr-tbody-shipments"></tbody>
+            </table>
+          </div>
+          <div class="brsnr-pager" id="brsnr-pager-shipments"></div>
+        </div>
+      </section>
+
+      <!-- ===== PENDING ===== -->
+      <section class="brsnr-section" id="brsnr-sec-pending" data-section="pending" hidden>
+        <div class="brsnr-kpi-grid" id="brsnr-pending-kpis"></div>
+        <div class="brsnr-grid brsnr-grid-1-1">
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Aging distribution</h3></div><div class="brsnr-chart"><canvas id="brsnr-ch-pending-aging"></canvas></div></div>
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Current hub concentration</h3></div><div class="brsnr-chart"><canvas id="brsnr-ch-pending-hubs"></canvas></div></div>
+        </div>
+        <div class="brsnr-panel">
+          <div class="brsnr-panel-head"><h3>Pending shipments</h3>
+            <select class="brsnr-select-sm" id="brsnr-pending-sort" aria-label="Sort pending shipments">
+              <option value="aging:desc">Highest aging</option>
+              <option value="aging:asc">Lowest aging</option>
+              <option value="total_price:desc">Highest value</option>
+              <option value="days_remaining:asc">Fewest days left</option>
+            </select></div>
+          <div class="brsnr-table-wrap"><table class="brsnr-table"><thead><tr><th>Shipment</th><th>Source</th><th>Current Hub</th><th class="brsnr-num">Aging</th><th class="brsnr-num">Days left</th><th class="brsnr-num">Total price</th><th>Risk</th></tr></thead><tbody id="brsnr-tbody-pending"></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- ===== NEW ===== -->
+      <section class="brsnr-section" id="brsnr-sec-new" data-section="new" hidden>
+        <div class="brsnr-kpi-grid" id="brsnr-new-kpis"></div>
+        <div class="brsnr-grid brsnr-grid-1-1">
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Top source hubs</h3></div><div class="brsnr-chart"><canvas id="brsnr-ch-new-src"></canvas></div></div>
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Top current hubs</h3></div><div class="brsnr-chart"><canvas id="brsnr-ch-new-cur"></canvas></div></div>
+        </div>
+        <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>New shipments</h3></div>
+          <div class="brsnr-table-wrap"><table class="brsnr-table"><thead><tr><th>Shipment</th><th>Source</th><th>Current Hub</th><th>Partner</th><th class="brsnr-num">Total price</th><th>BRSNR date</th></tr></thead><tbody id="brsnr-tbody-new"></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- ===== CLEARED ===== -->
+      <section class="brsnr-section" id="brsnr-sec-cleared" data-section="cleared" hidden>
+        <div class="brsnr-kpi-grid" id="brsnr-cleared-kpis"></div>
+        <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Clearance trend</h3></div><div class="brsnr-chart"><canvas id="brsnr-ch-cleared"></canvas></div></div>
+        <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Cleared shipments</h3></div>
+          <div class="brsnr-table-wrap"><table class="brsnr-table"><thead><tr><th>Shipment</th><th>Source</th><th>Last hub</th><th class="brsnr-num">Aging</th><th class="brsnr-num">Total price</th><th>Cleared on</th></tr></thead><tbody id="brsnr-tbody-cleared"></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- ===== RISK MONITOR ===== -->
+      <section class="brsnr-section" id="brsnr-sec-risk" data-section="risk" hidden>
+        <div class="brsnr-risk-tiles" id="brsnr-risk-tiles"></div>
+        <div class="brsnr-panel">
+          <div class="brsnr-panel-head"><h3 id="brsnr-risk-heading">Critical</h3><span class="brsnr-muted" id="brsnr-risk-count"></span></div>
+          <div class="brsnr-table-wrap"><table class="brsnr-table"><thead id="brsnr-thead-risk"></thead><tbody id="brsnr-tbody-risk"></tbody></table></div>
+          <div class="brsnr-pager" id="brsnr-pager-risk"></div>
+        </div>
+      </section>
+
+      <!-- ===== ANALYTICS ===== -->
+      <section class="brsnr-section" id="brsnr-sec-analytics" data-section="analytics" hidden>
+        <div class="brsnr-grid brsnr-grid-2-1">
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>New vs Pending vs Cleared</h3></div><div class="brsnr-chart"><canvas id="brsnr-ch-an-flow"></canvas></div></div>
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Risk distribution</h3></div><div class="brsnr-chart"><canvas id="brsnr-ch-an-risk"></canvas></div></div>
+        </div>
+        <div class="brsnr-grid brsnr-grid-1-1">
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Open BRSNR trend</h3></div><div class="brsnr-chart"><canvas id="brsnr-ch-an-trend"></canvas></div></div>
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Clearance %</h3></div><div class="brsnr-chart"><canvas id="brsnr-ch-an-clear"></canvas></div></div>
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Aging distribution</h3></div><div class="brsnr-chart"><canvas id="brsnr-ch-an-aging"></canvas></div></div>
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Aging trend</h3></div><div class="brsnr-chart"><canvas id="brsnr-ch-an-agingtrend"></canvas></div></div>
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Source hub distribution</h3></div><div class="brsnr-chart"><canvas id="brsnr-ch-an-src"></canvas></div></div>
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Current hub distribution</h3></div><div class="brsnr-chart"><canvas id="brsnr-ch-an-cur"></canvas></div></div>
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Value distribution</h3></div><div class="brsnr-chart"><canvas id="brsnr-ch-an-value"></canvas></div></div>
+          <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Loss trend</h3></div><div class="brsnr-chart"><canvas id="brsnr-ch-an-loss"></canvas></div></div>
+        </div>
+        <div class="brsnr-panel"><div class="brsnr-panel-head"><h3>Hub performance</h3></div><div class="brsnr-chart brsnr-chart-tall"><canvas id="brsnr-ch-an-hubs"></canvas></div></div>
+      </section>
+
+      <!-- ===== HUB PERFORMANCE ===== -->
+      <section class="brsnr-section" id="brsnr-sec-hubperf" data-section="hubperf" hidden>
+        <div class="brsnr-panel">
+          <div class="brsnr-panel-head"><h3>Hub performance ranking</h3><span class="brsnr-muted">Loss column = Overdue / Loss</span></div>
+          <div class="brsnr-table-wrap"><table class="brsnr-table" id="brsnr-tbl-hubs">
+            <thead><tr><th>#</th><th>Hub</th><th class="brsnr-num">Total</th><th class="brsnr-num">New</th><th class="brsnr-num">Pending</th><th class="brsnr-num">Cleared</th><th class="brsnr-num">Due soon</th><th class="brsnr-num">Overdue / Loss</th><th>Clearance %</th><th class="brsnr-num">Avg aging</th><th class="brsnr-num">Loss value</th><th>Trend</th></tr></thead>
+            <tbody id="brsnr-tbody-hubs"></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- ===== HISTORY ===== -->
+      <section class="brsnr-section" id="brsnr-sec-history" data-section="history" hidden>
+        <div class="brsnr-panel">
+          <div class="brsnr-panel-head"><h3>Snapshot</h3>
+            <label class="brsnr-field brsnr-field-inline"><span>BRSNR date</span><select id="brsnr-hist-date"></select></label></div>
+          <div class="brsnr-kpi-grid" id="brsnr-hist-kpis"></div>
+        </div>
+        <div class="brsnr-panel">
+          <div class="brsnr-panel-head"><h3>Compare dates</h3></div>
+          <div class="brsnr-compare-bar">
+            <label class="brsnr-field"><span>Date A</span><select id="brsnr-cmp-a"></select></label>
+            <span class="brsnr-vs">vs</span>
+            <label class="brsnr-field"><span>Date B</span><select id="brsnr-cmp-b"></select></label>
+            <button type="button" class="brsnr-btn brsnr-btn-primary" id="brsnr-cmp-run">Compare</button>
+          </div>
+          <div id="brsnr-cmp-result"></div>
+        </div>
+      </section>
+
+      <!-- ===== REPORTS ===== -->
+      <section class="brsnr-section" id="brsnr-sec-reports" data-section="reports" hidden>
+        <div class="brsnr-report-grid">
+          <article class="brsnr-report" data-report="daily"><h3>Daily BRSNR</h3><p>Every shipment in the selected snapshot.</p><div class="brsnr-report-actions"><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="csv">Export CSV</button><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="print">Print</button></div></article>
+          <article class="brsnr-report" data-report="pending"><h3>Pending</h3><p>Outstanding BRSNR with aging and value.</p><div class="brsnr-report-actions"><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="csv">Export CSV</button><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="print">Print</button></div></article>
+          <article class="brsnr-report" data-report="cleared"><h3>Cleared</h3><p>Shipments cleared on the selected snapshot date.</p><div class="brsnr-report-actions"><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="csv">Export CSV</button><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="print">Print</button></div></article>
+          <article class="brsnr-report" data-report="risk"><h3>Risk</h3><p>Open shipments at Watch, Critical or Loss risk.</p><div class="brsnr-report-actions"><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="csv">Export CSV</button><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="print">Print</button></div></article>
+          <article class="brsnr-report" data-report="loss"><h3>Loss Register</h3><p>Shipment, source, months, loss date, total price and loss amount.</p><div class="brsnr-report-actions"><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="csv">Export CSV</button><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="print">Print</button></div></article>
+          <article class="brsnr-report" data-report="hubs"><h3>Hub Performance</h3><p>Ranking with clearance %, aging and loss value.</p><div class="brsnr-report-actions"><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="csv">Export CSV</button><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="print">Print</button></div></article>
+          <article class="brsnr-report" data-report="compare"><h3>Historical Comparison</h3><p>New, cleared and still pending between two dates.</p><div class="brsnr-report-actions"><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="csv">Export CSV</button><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="print">Print</button></div></article>
+        </div>
+        <p class="brsnr-muted brsnr-note" id="brsnr-report-note"></p>
+      </section>
+
+      <!-- ===== PROFILE ===== -->
+      <section class="brsnr-section" id="brsnr-sec-profile" data-section="profile" hidden>
+        <div class="brsnr-panel brsnr-profile" id="brsnr-profile"></div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ================= SHIPMENT DRAWER ================= -->
+<div class="brsnr-drawer-root" id="brsnr-drawer-root" hidden>
+  <div class="brsnr-drawer-overlay" id="brsnr-drawer-overlay"></div>
+  <aside class="brsnr-drawer" id="brsnr-drawer" role="dialog" aria-modal="true" aria-labelledby="brsnr-drawer-title">
+    <header class="brsnr-drawer-head">
+      <div>
+        <span class="brsnr-eyebrow">Shipment</span>
+        <h2 id="brsnr-drawer-title">—</h2>
+        <div class="brsnr-drawer-sub" id="brsnr-drawer-sub"></div>
+        <div class="brsnr-drawer-badges" id="brsnr-drawer-badges"></div>
+      </div>
+      <button type="button" class="brsnr-icon-btn" id="brsnr-drawer-close" aria-label="Close"><svg class="brsnr-ico"><use href="#i-close"/></svg></button>
+    </header>
+    <div class="brsnr-drawer-body" id="brsnr-drawer-body"></div>
+  </aside>
+</div>
+
+<div class="brsnr-toasts" id="brsnr-toasts" aria-live="polite"></div>
+
+{% endblock %}
+
+{% block script %}
+<script src="/assets/fm_delivery/js/vendor/chart.umd.js"></script>
+<script src="/assets/fm_delivery/js/brsnr-dashboard.js?v=20261008-nav-fix"></script>
+{% endblock %}

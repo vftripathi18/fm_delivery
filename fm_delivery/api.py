@@ -1,7 +1,6 @@
 import frappe
 
 from fm_delivery.utils.excel_import import ExcelImporter
-
 from openpyxl import load_workbook
 
 
@@ -12,26 +11,177 @@ from openpyxl import load_workbook
 @frappe.whitelist()
 def import_excel(docname):
 
+    # --------------------------------------------------------
+    # Validate Document
+    # --------------------------------------------------------
+
+    if not docname:
+        frappe.throw("Import document name is required.")
+
     import_doc = frappe.get_doc(
         "FM Delivery Import",
         docname
     )
 
-    importer = ExcelImporter(import_doc)
+    # --------------------------------------------------------
+    # Prevent Duplicate Import
+    # --------------------------------------------------------
 
-    importer.load_workbook()
+    if import_doc.status == "Processing":
+        return {
+            "status": "Already Processing",
+            "message": "This Excel import is already being processed."
+        }
 
-    importer.validate_headers()
+    # --------------------------------------------------------
+    # Mark as Processing
+    # --------------------------------------------------------
 
-    result = importer.import_data()
-
-    import_doc.status = "Completed"
+    import_doc.status = "Processing"
 
     import_doc.save(
         ignore_permissions=True
     )
 
-    return result
+    frappe.db.commit()
+
+    # --------------------------------------------------------
+    # Queue Background Job
+    # --------------------------------------------------------
+
+    frappe.enqueue(
+        "fm_delivery.api._run_import_excel",
+        docname=docname,
+        queue="long",
+        timeout=1500,
+        enqueue_after_commit=True
+    )
+
+    # --------------------------------------------------------
+    # Return Immediately
+    # --------------------------------------------------------
+
+    return {
+        "status": "Queued",
+        "message": "Excel import has been queued for background processing."
+    }
+
+
+# ============================================================
+# DAILY DELIVERY BACKGROUND IMPORT
+# ============================================================
+
+def _run_import_excel(docname):
+
+    try:
+
+        # ----------------------------------------------------
+        # Get Import Document
+        # ----------------------------------------------------
+
+        import_doc = frappe.get_doc(
+            "FM Delivery Import",
+            docname
+        )
+
+        # ----------------------------------------------------
+        # Create Importer
+        # ----------------------------------------------------
+
+        importer = ExcelImporter(
+            import_doc
+        )
+
+        # ----------------------------------------------------
+        # Load Workbook
+        # ----------------------------------------------------
+
+        importer.load_workbook()
+
+        # ----------------------------------------------------
+        # Validate Headers
+        # ----------------------------------------------------
+
+        importer.validate_headers()
+
+        # ----------------------------------------------------
+        # Import Data
+        # ----------------------------------------------------
+
+        result = importer.import_data()
+
+        # ----------------------------------------------------
+        # Mark Completed
+        # ----------------------------------------------------
+
+        import_doc.status = "Completed"
+
+        import_doc.save(
+            ignore_permissions=True
+        )
+
+        frappe.db.commit()
+
+        # ----------------------------------------------------
+        # Log Success
+        # ----------------------------------------------------
+
+        frappe.logger().info(
+            f"FM Delivery Excel Import Completed: {docname}"
+        )
+
+        return result
+
+    except Exception:
+
+        # ----------------------------------------------------
+        # Rollback Failed Transaction
+        # ----------------------------------------------------
+
+        frappe.db.rollback()
+
+        # ----------------------------------------------------
+        # Log Error
+        # ----------------------------------------------------
+
+        error_message = frappe.get_traceback()
+
+        frappe.log_error(
+            title=f"FM Delivery Import Failed: {docname}",
+            message=error_message
+        )
+
+        # ----------------------------------------------------
+        # Update Status to Failed
+        # ----------------------------------------------------
+
+        try:
+
+            import_doc = frappe.get_doc(
+                "FM Delivery Import",
+                docname
+            )
+
+            import_doc.status = "Failed"
+
+            import_doc.save(
+                ignore_permissions=True
+            )
+
+            frappe.db.commit()
+
+        except Exception:
+
+            frappe.log_error(
+                title=f"Unable to update import status: {docname}",
+                message=frappe.get_traceback()
+            )
+
+        # ----------------------------------------------------
+        # Re-raise Error
+        # ----------------------------------------------------
+
+        raise
 
 
 # ============================================================
@@ -168,7 +318,9 @@ def import_salary_declaration(docname):
         )
     )
 
-    # Remove completely blank rows
+    # --------------------------------------------------------
+    # Remove Completely Blank Rows
+    # --------------------------------------------------------
 
     rows = [
         row
@@ -274,7 +426,10 @@ def import_salary_declaration(docname):
             if total_rate > 0:
                 methods += 1
 
-            # No method
+            # ------------------------------------------------
+            # No Method
+            # ------------------------------------------------
+
             if methods == 0:
 
                 frappe.throw(
@@ -290,7 +445,10 @@ def import_salary_declaration(docname):
                     """
                 )
 
-            # Multiple methods
+            # ------------------------------------------------
+            # Multiple Methods
+            # ------------------------------------------------
+
             if methods > 1:
 
                 frappe.throw(

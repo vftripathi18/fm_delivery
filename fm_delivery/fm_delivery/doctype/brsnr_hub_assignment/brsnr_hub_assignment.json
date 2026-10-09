@@ -1,0 +1,81 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "autoname": "BHA-.YYYY.-.####",
+ "creation": "2026-10-05 11:32:34.719609",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "hub",
+  "hub_incharge",
+  "from_date",
+  "to_date",
+  "active"
+ ],
+ "fields": [
+  {
+   "fieldname": "hub",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Hub",
+   "options": "BRSNR Hub",
+   "reqd": 1
+  },
+  {
+   "fieldname": "hub_incharge",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Hub Incharge",
+   "options": "BRSNR Hub Incharge",
+   "reqd": 1
+  },
+  {
+   "fieldname": "from_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "From Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "to_date",
+   "fieldtype": "Date",
+   "label": "To Date"
+  },
+  {
+   "default": "0",
+   "fieldname": "active",
+   "fieldtype": "Check",
+   "label": "Active"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-05 12:50:50.000982",
+ "modified_by": "Administrator",
+ "module": "FM Delivery",
+ "name": "BRSNR Hub Assignment",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

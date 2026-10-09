@@ -1,0 +1,206 @@
+{% extends "templates/web.html" %}
+
+{% block title %}BRSNR Secure Access{% endblock %}
+
+{% block head_include %}
+<link rel="stylesheet" href="/assets/fm_delivery/css/brsnr-login.css">
+{% endblock %}
+
+{% block page_content %}
+
+<div class="brsnr-login-page">
+
+    <div class="brsnr-login-card">
+
+        <!-- BRAND -->
+        <div class="brsnr-brand">
+            <div class="brsnr-logo">
+                BRSNR
+            </div>
+
+            <div class="brsnr-tagline">
+                Secure Operations Dashboard
+            </div>
+        </div>
+
+
+        <!-- =====================================================
+             EMAIL SCREEN
+             IDs MUST MATCH brsnr-login.js
+             ===================================================== -->
+
+        <div id="emailSection">
+
+            <div class="brsnr-icon">🔐</div>
+
+            <h1>Secure Dashboard Access</h1>
+
+            <p class="brsnr-description">
+                Enter your registered Hub Incharge email address
+                to receive a secure one-time verification code.
+            </p>
+
+            <div class="brsnr-field">
+
+                <label for="email">
+                    Email Address
+                </label>
+
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    placeholder="Enter your registered email"
+                    autocomplete="email"
+                    spellcheck="false"
+                >
+
+            </div>
+
+            <button
+                type="button"
+                id="sendOtpBtn"
+                class="brsnr-primary-btn"
+            >
+                Send Verification Code
+            </button>
+
+            <!-- JS message targets -->
+            <div
+                id="message"
+                class="brsnr-message"
+                aria-live="polite"
+            ></div>
+
+            <div
+                id="errorMessage"
+                class="brsnr-message error-message"
+                aria-live="assertive"
+            ></div>
+
+            <div
+                id="successMessage"
+                class="brsnr-message success-message"
+                aria-live="polite"
+            ></div>
+
+        </div>
+
+
+        <!-- =====================================================
+             OTP SCREEN
+             IDs MUST MATCH brsnr-login.js
+             ===================================================== -->
+
+        <div
+            id="otpSection"
+            style="display:none;"
+        >
+
+            <div class="brsnr-icon">✉</div>
+
+            <h1>Verify Your Identity</h1>
+
+            <p class="brsnr-description">
+                We've sent a 6-digit verification code to
+                <strong id="otp-email"></strong>
+            </p>
+
+            <div class="brsnr-field">
+
+                <label for="otp">
+                    Verification Code
+                </label>
+
+                <input
+                    type="text"
+                    id="otp"
+                    name="otp"
+                    placeholder="Enter 6-digit OTP"
+                    maxlength="6"
+                    minlength="6"
+                    inputmode="numeric"
+                    pattern="[0-9]{6}"
+                    autocomplete="one-time-code"
+                    spellcheck="false"
+                >
+
+            </div>
+
+            <button
+                type="button"
+                id="verifyOtpBtn"
+                class="brsnr-primary-btn"
+            >
+                Verify & Continue
+            </button>
+
+            <button
+                type="button"
+                id="resendOtpBtn"
+                class="brsnr-secondary-btn"
+            >
+                Resend OTP
+            </button>
+
+            <div
+                id="otp-message"
+                class="brsnr-message"
+                aria-live="polite"
+            ></div>
+
+            <button
+                type="button"
+                id="change-email-btn"
+                class="brsnr-link-btn"
+            >
+                ← Use another email
+            </button>
+
+        </div>
+
+
+        <!-- =====================================================
+             FOOTER
+             ===================================================== -->
+
+        <div class="brsnr-footer">
+
+            <div>
+                Protected BRSNR Operations Environment
+            </div>
+
+            <div class="brsnr-powered">
+                Powered by <strong>Vone8 Infotech</strong>
+            </div>
+
+            <div class="brsnr-support">
+
+                Technical Support:
+
+                <a href="mailto:helpdesk@wercatalyst.com">
+                    helpdesk@wercatalyst.com
+                </a>
+
+                &nbsp; | &nbsp;
+
+                <a href="tel:9328244100">
+                    +91 93282 44100
+                </a>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}
+
+
+{% block script %}
+
+<script src="/assets/fm_delivery/js/brsnr-login.js"></script>
+
+{% endblock %}

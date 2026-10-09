@@ -1,0 +1,356 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-10-05 11:50:01.429263",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "identity_section",
+  "brsnr_month",
+  "shipment_id",
+  "casper_id",
+  "profile_id",
+  "partner",
+  "wm_name",
+  "clearance_status",
+  "risk_level",
+  "loss_date",
+  "loss_amount",
+  "days_remaining",
+  "responsibility__location_section",
+  "source",
+  "state",
+  "source_type",
+  "source_zone",
+  "delivery_pincode",
+  "delivery_hub",
+  "current_hub",
+  "shipment_information_section",
+  "rtorvpfwd",
+  "forward_reverse_type",
+  "type",
+  "reverse_shipment_id",
+  "commercial_section",
+  "total_price",
+  "price_range",
+  "value_bucket",
+  "gmv",
+  "status__brsnr_logic_section",
+  "sele",
+  "status",
+  "final_remarks",
+  "brsnr_status",
+  "brsnr_date",
+  "daily_upload",
+  "sla__aging_section",
+  "date_from",
+  "customer_promise_date",
+  "logistics_promise_date",
+  "latest_update_time",
+  "aging",
+  "aging_bucket",
+  "section_break_bpsr",
+  "first_receive_time",
+  "first_receive_hub",
+  "last_receive_time",
+  "system_fields_section",
+  "previous_status",
+  "previous_hub",
+  "cleared_date"
+ ],
+ "fields": [
+  {
+   "fieldname": "identity_section",
+   "fieldtype": "Section Break",
+   "label": "Identity"
+  },
+  {
+   "fieldname": "shipment_id",
+   "fieldtype": "Data",
+   "label": "Shipment ID"
+  },
+  {
+   "fieldname": "casper_id",
+   "fieldtype": "Data",
+   "label": "Casper ID"
+  },
+  {
+   "fieldname": "profile_id",
+   "fieldtype": "Data",
+   "label": "Profile ID"
+  },
+  {
+   "fieldname": "partner",
+   "fieldtype": "Data",
+   "label": "Partner"
+  },
+  {
+   "fieldname": "wm_name",
+   "fieldtype": "Data",
+   "label": "WM Name"
+  },
+  {
+   "fieldname": "responsibility__location_section",
+   "fieldtype": "Section Break",
+   "label": "Responsibility / Location"
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Link",
+   "label": "Source",
+   "options": "BRSNR Hub"
+  },
+  {
+   "fieldname": "state",
+   "fieldtype": "Data",
+   "label": "State"
+  },
+  {
+   "fieldname": "source_type",
+   "fieldtype": "Data",
+   "label": "Source Type"
+  },
+  {
+   "fieldname": "source_zone",
+   "fieldtype": "Data",
+   "label": "Source Zone"
+  },
+  {
+   "fieldname": "delivery_pincode",
+   "fieldtype": "Data",
+   "label": "Delivery Pincode"
+  },
+  {
+   "fieldname": "delivery_hub",
+   "fieldtype": "Data",
+   "label": "Delivery Hub"
+  },
+  {
+   "fieldname": "current_hub",
+   "fieldtype": "Data",
+   "label": "Current Hub"
+  },
+  {
+   "fieldname": "shipment_information_section",
+   "fieldtype": "Section Break",
+   "label": "Shipment Information"
+  },
+  {
+   "fieldname": "rtorvpfwd",
+   "fieldtype": "Data",
+   "label": "RTO/RVP/FWD"
+  },
+  {
+   "fieldname": "forward_reverse_type",
+   "fieldtype": "Data",
+   "label": "Forward Reverse Type"
+  },
+  {
+   "fieldname": "type",
+   "fieldtype": "Data",
+   "label": "Type"
+  },
+  {
+   "fieldname": "reverse_shipment_id",
+   "fieldtype": "Data",
+   "label": "Reverse Shipment ID"
+  },
+  {
+   "fieldname": "commercial_section",
+   "fieldtype": "Section Break",
+   "label": "Commercial"
+  },
+  {
+   "fieldname": "total_price",
+   "fieldtype": "Currency",
+   "label": "Total Price"
+  },
+  {
+   "fieldname": "price_range",
+   "fieldtype": "Data",
+   "label": "Price Range"
+  },
+  {
+   "fieldname": "value_bucket",
+   "fieldtype": "Data",
+   "label": "Value Bucket"
+  },
+  {
+   "fieldname": "gmv",
+   "fieldtype": "Currency",
+   "label": "GMV"
+  },
+  {
+   "fieldname": "status__brsnr_logic_section",
+   "fieldtype": "Section Break",
+   "label": "Status / BRSNR Logic"
+  },
+  {
+   "fieldname": "sele",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Data",
+   "label": "Status"
+  },
+  {
+   "fieldname": "final_remarks",
+   "fieldtype": "Small Text",
+   "label": "Final Remarks"
+  },
+  {
+   "fieldname": "brsnr_status",
+   "fieldtype": "Select",
+   "label": "BRSNR Status",
+   "options": "New\nPending\nCleared"
+  },
+  {
+   "fieldname": "brsnr_date",
+   "fieldtype": "Date",
+   "label": "BRSNR Date"
+  },
+  {
+   "fieldname": "daily_upload",
+   "fieldtype": "Link",
+   "label": "Daily Upload",
+   "options": "BRSNR Daily Upload"
+  },
+  {
+   "fieldname": "sla__aging_section",
+   "fieldtype": "Section Break",
+   "label": "SLA / Aging"
+  },
+  {
+   "fieldname": "date_from",
+   "fieldtype": "Date",
+   "label": "Date From"
+  },
+  {
+   "fieldname": "customer_promise_date",
+   "fieldtype": "Date",
+   "label": "Customer Promise Date"
+  },
+  {
+   "fieldname": "logistics_promise_date",
+   "fieldtype": "Date",
+   "label": "Logistics Promise Date"
+  },
+  {
+   "fieldname": "latest_update_time",
+   "fieldtype": "Datetime",
+   "label": "Latest Update Time"
+  },
+  {
+   "fieldname": "aging",
+   "fieldtype": "Int",
+   "label": "Aging"
+  },
+  {
+   "fieldname": "aging_bucket",
+   "fieldtype": "Data",
+   "label": "Aging Bucket"
+  },
+  {
+   "fieldname": "section_break_bpsr",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "first_receive_time",
+   "fieldtype": "Datetime",
+   "label": "First Receive Time"
+  },
+  {
+   "fieldname": "first_receive_hub",
+   "fieldtype": "Data",
+   "label": "First Receive Hub"
+  },
+  {
+   "fieldname": "last_receive_time",
+   "fieldtype": "Datetime",
+   "label": "Last Receive Time"
+  },
+  {
+   "fieldname": "system_fields_section",
+   "fieldtype": "Section Break",
+   "label": "System fields"
+  },
+  {
+   "fieldname": "previous_status",
+   "fieldtype": "Data",
+   "label": "Previous Status",
+   "read_only": 1
+  },
+  {
+   "fieldname": "previous_hub",
+   "fieldtype": "Data",
+   "label": "Previous Hub",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cleared_date",
+   "fieldtype": "Date",
+   "label": "Cleared Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "brsnr_month",
+   "fieldtype": "Date",
+   "label": "BRSNR Month"
+  },
+  {
+   "fieldname": "clearance_status",
+   "fieldtype": "Select",
+   "label": "Clearance Status",
+   "options": "Pending\nDue Soon\nOverdue\nCleared\nLoss"
+  },
+  {
+   "fieldname": "risk_level",
+   "fieldtype": "Select",
+   "label": "Risk Level",
+   "options": "Safe\nWatch\nCritical\nLoss"
+  },
+  {
+   "fieldname": "loss_date",
+   "fieldtype": "Date",
+   "label": "Loss Date"
+  },
+  {
+   "fieldname": "loss_amount",
+   "fieldtype": "Currency",
+   "label": "Loss Amount"
+  },
+  {
+   "fieldname": "days_remaining",
+   "fieldtype": "Int",
+   "label": "Days Remaining"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-06 12:45:30.891551",
+ "modified_by": "mstripathi100@gmail.com",
+ "module": "FM Delivery",
+ "name": "BRSNR Shipment",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

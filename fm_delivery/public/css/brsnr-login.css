@@ -1,0 +1,201 @@
+.brsnr-login-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    background:
+        radial-gradient(circle at top left, #eaf4ff 0%, transparent 35%),
+        radial-gradient(circle at bottom right, #eef7ff 0%, transparent 35%),
+        #f5f8fc;
+}
+
+.brsnr-login-card {
+    width: 100%;
+    max-width: 480px;
+    background: #ffffff;
+    border: 1px solid #e7edf5;
+    border-radius: 22px;
+    padding: 42px;
+    box-shadow: 0 20px 60px rgba(31, 56, 85, 0.12);
+}
+
+.brsnr-brand {
+    text-align: center;
+    margin-bottom: 38px;
+}
+
+.brsnr-logo {
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    color: #173f72;
+}
+
+.brsnr-tagline {
+    margin-top: 6px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.8px;
+    color: #8995a7;
+}
+
+.brsnr-icon {
+    width: 58px;
+    height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+    border-radius: 16px;
+    background: #edf5ff;
+    font-size: 25px;
+}
+
+.brsnr-login-card h1 {
+    margin: 0;
+    text-align: center;
+    font-size: 25px;
+    font-weight: 700;
+    color: #172033;
+}
+
+.brsnr-description {
+    margin: 13px auto 30px;
+    max-width: 390px;
+    text-align: center;
+    font-size: 14px;
+    line-height: 1.7;
+    color: #667085;
+}
+
+.brsnr-field {
+    margin-bottom: 18px;
+}
+
+.brsnr-field label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #344054;
+}
+
+.brsnr-field input {
+    width: 100%;
+    height: 52px;
+    padding: 0 15px;
+    border: 1px solid #d9e1eb;
+    border-radius: 11px;
+    outline: none;
+    font-size: 14px;
+    box-sizing: border-box;
+    transition: all .2s ease;
+}
+
+.brsnr-field input:focus {
+    border-color: #1769aa;
+    box-shadow: 0 0 0 4px rgba(23, 105, 170, .08);
+}
+
+.brsnr-primary-btn,
+.brsnr-secondary-btn {
+    width: 100%;
+    height: 52px;
+    border-radius: 11px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s ease;
+}
+
+.brsnr-primary-btn {
+    border: none;
+    color: #ffffff;
+    background: linear-gradient(135deg, #173f72, #1769aa);
+    box-shadow: 0 8px 20px rgba(23, 63, 114, .20);
+}
+
+.brsnr-primary-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 25px rgba(23, 63, 114, .25);
+}
+
+.brsnr-primary-btn:disabled {
+    opacity: .65;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.brsnr-secondary-btn {
+    margin-top: 11px;
+    border: 1px solid #dce3ec;
+    background: #ffffff;
+    color: #344054;
+}
+
+.brsnr-secondary-btn:hover {
+    background: #f8fafc;
+}
+
+.brsnr-link-btn {
+    display: block;
+    margin: 20px auto 0;
+    border: none;
+    background: transparent;
+    color: #1769aa;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.brsnr-message {
+    min-height: 20px;
+    margin-top: 14px;
+    text-align: center;
+    font-size: 13px;
+}
+
+.brsnr-message.success {
+    color: #16805c;
+}
+
+.brsnr-message.error {
+    color: #c0392b;
+}
+
+.brsnr-footer {
+    margin-top: 35px;
+    padding-top: 22px;
+    border-top: 1px solid #edf0f4;
+    text-align: center;
+    font-size: 10px;
+    line-height: 1.7;
+    color: #98a2b3;
+}
+
+.brsnr-powered {
+    margin-top: 6px;
+    color: #667085;
+}
+
+.brsnr-support {
+    margin-top: 7px;
+}
+
+.brsnr-support a {
+    color: #1769aa;
+    text-decoration: none;
+}
+
+@media (max-width: 600px) {
+
+    .brsnr-login-page {
+        padding: 20px 14px;
+    }
+
+    .brsnr-login-card {
+        padding: 30px 22px;
+        border-radius: 18px;
+    }
+
+}

@@ -1,0 +1,143 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-10-05 12:19:32.387112",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "shipment",
+  "brsnr_date",
+  "shipment_id",
+  "daily_upload",
+  "source",
+  "status",
+  "current_hub",
+  "brsnr_status",
+  "aging",
+  "aging_bucket",
+  "final_remarks",
+  "previous_hub",
+  "previous_status"
+ ],
+ "fields": [
+  {
+   "fieldname": "shipment",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Shipment",
+   "options": "BRSNR Shipment",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "shipment_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Shipment ID",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "brsnr_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "BRSNR Date",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "daily_upload",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Daily Upload",
+   "options": "BRSNR Daily Upload",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Link",
+   "label": "Source / Responsible Hub",
+   "options": "BRSNR Hub",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "current_hub",
+   "fieldtype": "Data",
+   "label": "Current Hub",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Data",
+   "label": "Status",
+   "read_only": 1
+  },
+  {
+   "fieldname": "brsnr_status",
+   "fieldtype": "Select",
+   "label": "BRSNR Status",
+   "options": "New\nPending\nCleared",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "aging",
+   "fieldtype": "Int",
+   "label": "Aging",
+   "read_only": 1
+  },
+  {
+   "fieldname": "aging_bucket",
+   "fieldtype": "Data",
+   "label": "Aging Bucket",
+   "read_only": 1
+  },
+  {
+   "fieldname": "final_remarks",
+   "fieldtype": "Small Text",
+   "label": "Final Remarks"
+  },
+  {
+   "fieldname": "previous_hub",
+   "fieldtype": "Data",
+   "label": "Previous Hub",
+   "read_only": 1
+  },
+  {
+   "fieldname": "previous_status",
+   "fieldtype": "Data",
+   "label": "Previous Status",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-05 13:17:45.381838",
+ "modified_by": "Administrator",
+ "module": "FM Delivery",
+ "name": "BRSNR Shipment History",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

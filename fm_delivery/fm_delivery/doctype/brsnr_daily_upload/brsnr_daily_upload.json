@@ -1,0 +1,120 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "BRSNR-.YYYY.-.####",
+ "creation": "2026-10-05 11:43:01.960568",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "upload_date",
+  "brsnr_date",
+  "import_file",
+  "uploaded_by",
+  "upload_time",
+  "status",
+  "total_records",
+  "new_records",
+  "pending_records",
+  "cleared_records",
+  "error_message"
+ ],
+ "fields": [
+  {
+   "fieldname": "upload_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Upload Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "brsnr_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "BRSNR Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "import_file",
+   "fieldtype": "Attach",
+   "in_list_view": 1,
+   "label": "Import File",
+   "reqd": 1
+  },
+  {
+   "fieldname": "uploaded_by",
+   "fieldtype": "Link",
+   "label": "Uploaded By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "upload_time",
+   "fieldtype": "Datetime",
+   "label": "Upload Time",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nProcessing\nCompleted\nFailed"
+  },
+  {
+   "fieldname": "total_records",
+   "fieldtype": "Int",
+   "label": "Total Records",
+   "read_only": 1
+  },
+  {
+   "fieldname": "new_records",
+   "fieldtype": "Int",
+   "label": "New Records",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pending_records",
+   "fieldtype": "Int",
+   "label": "Pending Records",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cleared_records",
+   "fieldtype": "Int",
+   "label": "Cleared Records",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error_message",
+   "fieldtype": "Small Text",
+   "label": "Error Message"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-05 13:16:04.865901",
+ "modified_by": "Administrator",
+ "module": "FM Delivery",
+ "name": "BRSNR Daily Upload",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
