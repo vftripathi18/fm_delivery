@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "allow_import": 1,
  "allow_rename": 1,
  "creation": "2026-10-05 11:50:01.429263",
  "doctype": "DocType",
@@ -329,7 +330,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-06 12:45:30.891551",
+ "modified": "2026-10-09 17:26:50.512973",
  "modified_by": "mstripathi100@gmail.com",
  "module": "FM Delivery",
  "name": "BRSNR Shipment",

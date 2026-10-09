@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "allow_import": 1,
  "allow_rename": 1,
  "autoname": "BRSNR-.YYYY.-.####",
  "creation": "2026-10-05 11:43:01.960568",
@@ -92,8 +93,8 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-05 13:16:04.865901",
- "modified_by": "Administrator",
+ "modified": "2026-10-09 17:27:32.325909",
+ "modified_by": "mstripathi100@gmail.com",
  "module": "FM Delivery",
  "name": "BRSNR Daily Upload",
  "naming_rule": "By \"Naming Series\" field",

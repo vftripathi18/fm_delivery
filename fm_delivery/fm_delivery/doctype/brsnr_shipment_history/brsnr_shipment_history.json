@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "allow_import": 1,
  "allow_rename": 1,
  "creation": "2026-10-05 12:19:32.387112",
  "doctype": "DocType",
@@ -115,8 +116,8 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-05 13:17:45.381838",
- "modified_by": "Administrator",
+ "modified": "2026-10-09 17:27:25.148820",
+ "modified_by": "mstripathi100@gmail.com",
  "module": "FM Delivery",
  "name": "BRSNR Shipment History",
  "owner": "Administrator",

@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "allow_import": 1,
  "allow_rename": 1,
  "autoname": "field:hub_name",
  "creation": "2026-10-05 11:27:37.393987",
@@ -32,8 +33,8 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-05 13:43:56.507820",
- "modified_by": "Administrator",
+ "modified": "2026-10-09 17:27:17.342412",
+ "modified_by": "mstripathi100@gmail.com",
  "module": "FM Delivery",
  "name": "BRSNR Hub",
  "naming_rule": "By fieldname",
