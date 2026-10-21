@@ -237,8 +237,13 @@ html[data-brsnr-theme="dark"] .brsnr-theme-opt[data-theme-opt="dark"] {
 .brsnr-score-drill { width: 100%; border: 0; padding: 2px 0; background: transparent; color: var(--brsnr-text); text-align: right; cursor: pointer; font: inherit; }
 .brsnr-score-drill:hover { color: var(--brsnr-accent); }
 .brsnr-score-drill small, .brsnr-table td small { display: block; color: var(--brsnr-muted); font-size: 11px; white-space: nowrap; }
+.brsnr-score-table { min-width: 1700px; }
 .brsnr-total-row { background: var(--brsnr-surface-2); border-top: 2px solid var(--brsnr-border); }
 .brsnr-total-row th, .brsnr-total-row td { font-weight: 700; }
+.brsnr-group-row { background: var(--brsnr-surface-2); }
+.brsnr-group-row th { color: var(--brsnr-accent); }
+.brsnr-subtotal-row { border-top: 1px solid var(--brsnr-border); }
+.brsnr-subtotal-row th, .brsnr-subtotal-row td { font-weight: 650; }
 
 /* ---------- Banner ---------- */
 .brsnr-banner {

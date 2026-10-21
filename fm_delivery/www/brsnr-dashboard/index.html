@@ -277,36 +277,35 @@
       <!-- ===== HUB PERFORMANCE ===== -->
       <section class="brsnr-section" id="brsnr-sec-hubperf" data-section="hubperf" hidden>
         <div class="brsnr-panel">
-          <div class="brsnr-panel-head"><h3>Current hub scorecard</h3><span class="brsnr-muted">Shipment counts and amounts use the full filtered snapshot; Loss uses the final Loss amount.</span></div>
-          <div class="brsnr-table-wrap"><table class="brsnr-table" id="brsnr-tbl-hubs">
+          <div class="brsnr-panel-head"><h3>Source Hub scorecard</h3><span class="brsnr-muted">Counts and amounts use Source hubs across the full filtered snapshot; Loss uses the final Loss amount.</span></div>
+          <div class="brsnr-table-wrap"><table class="brsnr-table brsnr-score-table" id="brsnr-tbl-hubs">
             <thead><tr>
-              <th><button type="button" class="brsnr-link" data-score-sort="hub">Current hub</button></th>
-              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="new_count">New</button></th>
-              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="pending_count">Pending</button></th>
-              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="cleared_count">Cleared</button></th>
-              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="due_soon_count">Due Soon</button></th>
-              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="watch_count">Watch</button></th>
-              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="critical_count">Critical</button></th>
-              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="loss_count">Loss</button></th>
-              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="total">Total</button></th>
+              <th><button type="button" class="brsnr-link" data-score-sort="hub">Source Hub</button></th>
+              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="new_count">New Count</button></th><th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="new_amount">New Amount</button></th>
+              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="pending_count">Pending Count</button></th><th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="pending_amount">Pending Amount</button></th>
+              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="cleared_count">Cleared Count</button></th><th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="cleared_amount">Cleared Amount</button></th>
+              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="due_soon_count">Due Soon Count</button></th><th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="due_soon_amount">Due Soon Amount</button></th>
+              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="watch_count">Watch Count</button></th><th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="watch_amount">Watch Amount</button></th>
+              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="critical_count">Critical Count</button></th><th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="critical_amount">Critical Amount</button></th>
+              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="loss_count">Loss Count</button></th><th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="loss_amount">Loss Amount</button></th>
+              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="total">Total Shipments</button></th><th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="total_amount">Total Shipment Value</button></th>
             </tr></thead>
             <tbody id="brsnr-tbody-hubs"></tbody>
             <tfoot id="brsnr-tfoot-hubs"></tfoot></table></div>
         </div>
         <div class="brsnr-panel">
           <div class="brsnr-panel-head"><h3>Incharge scorecard</h3><span class="brsnr-muted">Only active assignments valid on the selected snapshot date are included.</span></div>
-          <div class="brsnr-table-wrap"><table class="brsnr-table" id="brsnr-tbl-incharges">
+          <div class="brsnr-table-wrap"><table class="brsnr-table brsnr-score-table" id="brsnr-tbl-incharges">
             <thead><tr>
-              <th><button type="button" class="brsnr-link" data-score-sort="incharge_name">Incharge</button></th>
-              <th><button type="button" class="brsnr-link" data-score-sort="assigned_hubs_text">Assigned hubs</button></th>
-              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="new_count">New</button></th>
-              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="pending_count">Pending</button></th>
-              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="cleared_count">Cleared</button></th>
-              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="due_soon_count">Due Soon</button></th>
-              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="watch_count">Watch</button></th>
-              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="critical_count">Critical</button></th>
-              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="loss_count">Loss</button></th>
-              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="total">Total</button></th>
+              <th><button type="button" class="brsnr-link" data-score-sort="incharge_name">Incharge</button></th><th><button type="button" class="brsnr-link" data-score-sort="source_hub">Source Hub</button></th>
+              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="new_count">New Count</button></th><th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="new_amount">New Amount</button></th>
+              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="pending_count">Pending Count</button></th><th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="pending_amount">Pending Amount</button></th>
+              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="cleared_count">Cleared Count</button></th><th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="cleared_amount">Cleared Amount</button></th>
+              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="due_soon_count">Due Soon Count</button></th><th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="due_soon_amount">Due Soon Amount</button></th>
+              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="watch_count">Watch Count</button></th><th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="watch_amount">Watch Amount</button></th>
+              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="critical_count">Critical Count</button></th><th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="critical_amount">Critical Amount</button></th>
+              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="loss_count">Loss Count</button></th><th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="loss_amount">Loss Amount</button></th>
+              <th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="total">Total Shipments</button></th><th class="brsnr-num"><button type="button" class="brsnr-link" data-score-sort="total_amount">Total Shipment Value</button></th>
             </tr></thead>
             <tbody id="brsnr-tbody-incharges"></tbody>
             <tfoot id="brsnr-tfoot-incharges"></tfoot></table></div>
@@ -336,7 +335,7 @@
       <section class="brsnr-section" id="brsnr-sec-reports" data-section="reports" hidden>
         <div class="brsnr-report-grid">
           <article class="brsnr-report" data-report="summary"><h3>Summary</h3><p>Filtered snapshot KPIs, risk counts, shipment value and Loss amount.</p><div class="brsnr-report-actions"><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="csv">Export CSV</button><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="print">Print</button></div></article>
-          <article class="brsnr-report" data-report="hub-wise"><h3>Hub-wise</h3><p>Current hub shipment status, risk and amount scorecard.</p><div class="brsnr-report-actions"><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="csv">Export CSV</button><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="print">Print</button></div></article>
+          <article class="brsnr-report" data-report="hub-wise"><h3>Hub-wise</h3><p>Source Hub shipment status, risk and amount scorecard.</p><div class="brsnr-report-actions"><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="csv">Export CSV</button><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="print">Print</button></div></article>
           <article class="brsnr-report" data-report="incharge-wise"><h3>Incharge-wise</h3><p>Valid active assignments and filtered shipment metrics.</p><div class="brsnr-report-actions"><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="csv">Export CSV</button><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="print">Print</button></div></article>
           <article class="brsnr-report" data-report="ageing-due"><h3>Ageing and Due</h3><p>Shipment aging, due month, days remaining and financial risk.</p><div class="brsnr-report-actions"><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="csv">Export CSV</button><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="print">Print</button></div></article>
           <article class="brsnr-report" data-report="clearance"><h3>Clearance</h3><p>Filtered operational and financial clearance records.</p><div class="brsnr-report-actions"><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="csv">Export CSV</button><button type="button" class="brsnr-btn brsnr-btn-sm" data-act="print">Print</button></div></article>

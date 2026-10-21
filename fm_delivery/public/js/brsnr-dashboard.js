@@ -2491,12 +2491,21 @@ frappe.ready(function () {
     });
   }
 
-  function scoreCell(row, countKey, amountKey, filterAttr) {
+  var SCORE_METRICS = [
+    ["new_count", "new_amount", 'data-score-status="New"'],
+    ["pending_count", "pending_amount", 'data-score-status="Pending"'],
+    ["cleared_count", "cleared_amount", 'data-score-status="Cleared"'],
+    ["due_soon_count", "due_soon_amount", 'data-score-clearance="Due Soon"'],
+    ["watch_count", "watch_amount", 'data-score-risk="Watch"'],
+    ["critical_count", "critical_amount", 'data-score-risk="Critical"'],
+    ["loss_count", "loss_amount", 'data-score-risk="Loss"']
+  ];
+
+  function scoreCell(row, valueKey, filterAttr, isAmount) {
     var attrs = [];
     if (row.hub !== undefined) {
-      attrs.push('data-score-current-hub="' + U.esc(row.hub) + '"');
-    }
-    if (row.assigned_hubs && row.assigned_hubs.length) {
+      attrs.push('data-score-source="' + U.esc(row.hub) + '"');
+    } else if (row.assigned_hubs && row.assigned_hubs.length) {
       attrs.push('data-score-source="' + U.esc(row.assigned_hubs.join(",")) + '"');
     }
     if (filterAttr) {
@@ -2505,77 +2514,105 @@ frappe.ready(function () {
     return (
       '<button type="button" class="brsnr-score-drill" ' +
       attrs.join(" ") + ">" +
-      U.num(row[countKey]) +
-      '<small>' + U.money(row[amountKey]) + "</small></button>"
+      (isAmount ? U.money(row[valueKey]) : U.num(row[valueKey])) +
+      "</button>"
     );
   }
 
+  function scoreCells(row) {
+    var fields = SCORE_METRICS.concat([["total", "total_amount", ""]]);
+    return fields.map(function (field) {
+      return '<td class="brsnr-num">' +
+        scoreCell(row, field[0], field[2], false) +
+        "</td><td class=\"brsnr-num\">" +
+        scoreCell(row, field[1], field[2], true) +
+        "</td>";
+    }).join("");
+  }
+
   function scoreTotalsRow(total, kind) {
-    var label = kind === "hub" ? "Filtered total" : "Assigned total";
-    var fields = [
-      ["new_count", "new_amount"],
-      ["pending_count", "pending_amount"],
-      ["cleared_count", "cleared_amount"],
-      ["due_soon_count", "due_soon_amount"],
-      ["watch_count", "watch_amount"],
-      ["critical_count", "critical_amount"],
-      ["loss_count", "loss_amount"],
-      ["total", "total_amount"]
-    ];
     return '<tr class="brsnr-total-row"><th colspan="' +
-      (kind === "hub" ? "1" : "2") + '">' + U.esc(label) +
-      "</th>" + fields.map(function (field) {
-        return '<td class="brsnr-num">' +
-          U.num(total[field[0]]) + "<small>" +
-          U.money(total[field[1]]) + "</small></td>";
-      }).join("") + "</tr>";
+      (kind === "hub" ? "1" : "2") + '">Grand Total</th>' +
+      scoreCells(total) + "</tr>";
+  }
+
+  function sortInchargeGroups(groups) {
+    var sortedGroups = sortedScoreRows(groups, "incharge");
+    return sortedGroups.map(function (group) {
+      return Object.assign({}, group, {
+        hubs: sortedScoreRows(group.hubs || [], "hub")
+      });
+    });
+  }
+
+  function inchargeReportRows(groups, totals) {
+    var rows = [];
+    sortInchargeGroups(groups).forEach(function (group) {
+      rows.push({
+        incharge_name: group.incharge_name,
+        source_hub: "",
+        report_row_type: "group"
+      });
+      (group.hubs || []).forEach(function (hub) {
+        rows.push(Object.assign({}, hub, {
+          incharge_name: "",
+          source_hub: hub.hub,
+          report_row_type: "hub"
+        }));
+      });
+      rows.push(Object.assign({}, group, {
+        incharge_name: group.incharge_name + " Subtotal",
+        source_hub: "",
+        report_row_type: "subtotal"
+      }));
+    });
+    rows.push(Object.assign({}, totals, {
+      incharge_name: "Grand Total",
+      source_hub: "",
+      report_row_type: "grand-total"
+    }));
+    return rows;
   }
 
   function renderHubScorecard(d) {
-    var rows = sortedScoreRows(d.hub_scorecard || d.hub_performance, "hub");
+    var rows = sortedScoreRows(d.source_scorecard || d.hub_performance, "hub");
     var body = byId("brsnr-tbody-hubs");
     body.innerHTML = rows.length
       ? rows.map(function (h) {
-          var currentHubButton =
-            '<button type="button" class="brsnr-link" data-score-current-hub="' +
+          var sourceButton =
+            '<button type="button" class="brsnr-link" data-score-source="' +
             U.esc(h.hub) + '">' + U.esc(h.hub) + "</button>";
-          return "<tr><th>" + currentHubButton + "</th>" +
-            "<td>" + scoreCell(h, "new_count", "new_amount", 'data-score-status="New"') + "</td>" +
-            "<td>" + scoreCell(h, "pending_count", "pending_amount", 'data-score-status="Pending"') + "</td>" +
-            "<td>" + scoreCell(h, "cleared_count", "cleared_amount", 'data-score-status="Cleared"') + "</td>" +
-            "<td>" + scoreCell(h, "due_soon_count", "due_soon_amount", 'data-score-clearance="Due Soon"') + "</td>" +
-            "<td>" + scoreCell(h, "watch_count", "watch_amount", 'data-score-risk="Watch"') + "</td>" +
-            "<td>" + scoreCell(h, "critical_count", "critical_amount", 'data-score-risk="Critical"') + "</td>" +
-            "<td>" + scoreCell(h, "loss_count", "loss_amount", 'data-score-risk="Loss"') + "</td>" +
-            "<td>" + scoreCell(h, "total", "total_amount", "") + "</td></tr>";
+          return "<tr><th>" + sourceButton + "</th>" + scoreCells(h) + "</tr>";
         }).join("")
-      : R.emptyRow(9, "No hub data", "No current-hub groups match the selected filters.");
+      : R.emptyRow(17, "No hub data", "No Source hubs match the selected filters.");
     byId("brsnr-tfoot-hubs").innerHTML = rows.length
-      ? scoreTotalsRow(d.hub_scorecard_totals || {}, "hub")
+      ? scoreTotalsRow(d.source_scorecard_totals || {}, "hub")
       : "";
   }
 
   function renderInchargeScorecard(d) {
-    var rows = sortedScoreRows(d.incharge_scorecard, "incharge");
+    var rows = sortInchargeGroups(d.incharge_scorecard || []);
     var body = byId("brsnr-tbody-incharges");
     body.innerHTML = rows.length
       ? rows.map(function (item) {
-          var sourceButton =
-            '<button type="button" class="brsnr-link" data-score-source="' +
-            U.esc((item.assigned_hubs || []).join(",")) + '">' +
-            U.esc(item.assigned_hubs_text || "—") + "</button>";
-          return "<tr><th>" + U.esc(item.incharge_name) + "</th><td>" +
-            sourceButton + "</td>" +
-            "<td>" + scoreCell(item, "new_count", "new_amount", 'data-score-status="New"') + "</td>" +
-            "<td>" + scoreCell(item, "pending_count", "pending_amount", 'data-score-status="Pending"') + "</td>" +
-            "<td>" + scoreCell(item, "cleared_count", "cleared_amount", 'data-score-status="Cleared"') + "</td>" +
-            "<td>" + scoreCell(item, "due_soon_count", "due_soon_amount", 'data-score-clearance="Due Soon"') + "</td>" +
-            "<td>" + scoreCell(item, "watch_count", "watch_amount", 'data-score-risk="Watch"') + "</td>" +
-            "<td>" + scoreCell(item, "critical_count", "critical_amount", 'data-score-risk="Critical"') + "</td>" +
-            "<td>" + scoreCell(item, "loss_count", "loss_amount", 'data-score-risk="Loss"') + "</td>" +
-            "<td>" + scoreCell(item, "total", "total_amount", "") + "</td></tr>";
+          var groupRow =
+            '<tr class="brsnr-group-row"><th colspan="2">' +
+            U.esc(item.incharge_name) +
+            '</th><td colspan="16"></td></tr>';
+          var hubRows = (item.hubs || []).map(function (hub) {
+            var sourceButton =
+              '<button type="button" class="brsnr-link" data-score-source="' +
+              U.esc(hub.hub) + '">' + U.esc(hub.hub_name || hub.hub) + "</button>";
+            return "<tr><td></td><th>" + sourceButton + "</th>" +
+              scoreCells(hub) + "</tr>";
+          }).join("");
+          var subtotal =
+            '<tr class="brsnr-subtotal-row"><th>' +
+            U.esc(item.incharge_name) +
+            ' Subtotal</th><td></td>' + scoreCells(item) + "</tr>";
+          return groupRow + hubRows + subtotal;
         }).join("")
-      : R.emptyRow(10, "No active assignments", "No active incharge assignment is valid for this snapshot and scope.");
+      : R.emptyRow(18, "No active assignments", "No active incharge assignment is valid for this snapshot and scope.");
     byId("brsnr-tfoot-incharges").innerHTML = rows.length
       ? scoreTotalsRow(d.incharge_scorecard_totals || {}, "incharge")
       : "";
@@ -2587,8 +2624,8 @@ frappe.ready(function () {
 
     var hubBody = byId("brsnr-tbody-hubs");
     var inchargeBody = byId("brsnr-tbody-incharges");
-    R.skelRows(hubBody, 9, 4);
-    R.skelRows(inchargeBody, 10, 4);
+    R.skelRows(hubBody, 17, 4);
+    R.skelRows(inchargeBody, 18, 4);
 
     return needBase().then(function (d) {
       if (!d || !ok()) return;
@@ -3297,7 +3334,7 @@ frappe.ready(function () {
   ];
 
   var COLS_HUB = [
-    ["Current Hub", "hub"],
+    ["Source Hub", "source_hub"],
     ["New Count", "new_count"], ["New Amount", "new_amount"],
     ["Pending Count", "pending_count"], ["Pending Amount", "pending_amount"],
     ["Cleared Count", "cleared_count"], ["Cleared Amount", "cleared_amount"],
@@ -3305,12 +3342,12 @@ frappe.ready(function () {
     ["Watch Count", "watch_count"], ["Watch Amount", "watch_amount"],
     ["Critical Count", "critical_count"], ["Critical Amount", "critical_amount"],
     ["Loss Count", "loss_count"], ["Loss Amount", "loss_amount"],
-    ["Total", "total"], ["Total Shipment Value", "total_amount"]
+    ["Total Shipments", "total"], ["Total Shipment Value", "total_amount"]
   ];
 
   var COLS_INCHARGE = [
     ["Incharge", "incharge_name"],
-    ["Assigned Hubs", "assigned_hubs_text"],
+    ["Source Hub", "source_hub"],
     ["New Count", "new_count"], ["New Amount", "new_amount"],
     ["Pending Count", "pending_count"], ["Pending Amount", "pending_amount"],
     ["Cleared Count", "cleared_count"], ["Cleared Amount", "cleared_amount"],
@@ -3318,7 +3355,7 @@ frappe.ready(function () {
     ["Watch Count", "watch_count"], ["Watch Amount", "watch_amount"],
     ["Critical Count", "critical_count"], ["Critical Amount", "critical_amount"],
     ["Loss Count", "loss_count"], ["Loss Amount", "loss_amount"],
-    ["Total", "total"], ["Total Shipment Value", "total_amount"]
+    ["Total Shipments", "total"], ["Total Shipment Value", "total_amount"]
   ];
 
   var COLS_SUMMARY = [
@@ -3495,19 +3532,24 @@ frappe.ready(function () {
         return {
           d: d,
           cols: COLS_INCHARGE,
-          rows: sortedScoreRows(d.incharge_scorecard, "incharge"),
-          totals: d.incharge_scorecard_totals
+          rows: inchargeReportRows(d.incharge_scorecard || [], d.incharge_scorecard_totals || {}),
+          hasSummaryRows: true
         };
       });
     }
 
     if (key.indexOf("hub") >= 0) {
       return needBase().then(function (d) {
+        var hubs = sortedScoreRows(d.source_scorecard || d.hub_performance, "hub");
+        var rows = hubs.concat([Object.assign(
+          { hub: "Grand Total", source_hub: "Grand Total" },
+          d.source_scorecard_totals || {}
+        )]);
         return {
           d: d,
           cols: COLS_HUB,
-          rows: sortedScoreRows(d.hub_scorecard || d.hub_performance, "hub"),
-          totals: d.hub_scorecard_totals
+          rows: rows,
+          hasSummaryRows: true
         };
       });
     }
@@ -3581,7 +3623,7 @@ frappe.ready(function () {
         });
       });
       var totalRow = r.totals;
-      if (!totalRow && rows.length && r.cols !== COLS_SUMMARY) {
+      if (!totalRow && !r.hasSummaryRows && rows.length && r.cols !== COLS_SUMMARY) {
         totalRow = {};
         r.cols.forEach(function (col) {
           if (col[1] === "shipment_id" || col[1] === "hub" || col[1] === "incharge_name") {
@@ -3601,10 +3643,10 @@ frappe.ready(function () {
       }
       if (totalRow) {
         if (totalRow.hub !== undefined || r.cols === COLS_HUB) {
-          totalRow.hub = "Filtered total";
+          totalRow.source_hub = "Grand Total";
         }
         if (totalRow.incharge_name !== undefined || r.cols === COLS_INCHARGE) {
-          totalRow.incharge_name = "Assigned total";
+          totalRow.incharge_name = "Grand Total";
         }
         matrix.push(r.cols.map(function (col) {
           return totalRow[col[1]];

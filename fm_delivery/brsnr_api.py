@@ -1736,6 +1736,8 @@ def _empty_dashboard(identity, hubs, snapshot_date, latest_date, hub_options=Non
         "trend": [],
         "hub_scorecard": [],
         "hub_scorecard_totals": empty_scorecard_totals,
+        "source_scorecard": [],
+        "source_scorecard_totals": dict(empty_scorecard_totals),
         "hub_performance": [],
         "incharge_scorecard": [],
         "incharge_scorecard_totals": dict(empty_scorecard_totals),
@@ -2242,6 +2244,40 @@ def get_dashboard_data(
         key=lambda row: (-row["pending_count"], -row["loss_count"]),
     )
 
+    source_scorecard = {}
+    for hub_option in options:
+        hub_name = hub_option["name"]
+        source_scorecard[hub_name] = {
+            "hub": hub_name,
+            "source_hub": hub_name,
+            "hub_name": hub_option.get("hub_name") or hub_name,
+            **{field: 0 for field in score_fields},
+            "loss_count": 0,
+            "loss_amount": 0.0,
+            "loss_value": 0.0,
+        }
+    for row in source_performance:
+        score = source_scorecard.get(row["hub"])
+        if score:
+            score.update(row)
+            score["source_hub"] = row["hub"]
+    source_scorecard = sorted(
+        source_scorecard.values(),
+        key=lambda row: str(row["hub_name"]).lower(),
+    )
+    source_scorecard_totals = {
+        field: round(sum(flt(row[field]) for row in source_scorecard), 2)
+        if field.endswith("amount")
+        else sum(cint(row[field]) for row in source_scorecard)
+        for field in score_fields + ("loss_count", "loss_amount")
+    }
+    source_scorecard_totals["avg_aging"] = round(
+        sum(flt(row["avg_aging"]) * cint(row["total"]) for row in source_scorecard)
+        / source_scorecard_totals["total"],
+        2,
+    ) if source_scorecard_totals["total"] else 0
+    source_scorecard_totals["loss_value"] = source_scorecard_totals["loss_amount"]
+
     assignment_where = [
         "a.active = 1",
         "(a.from_date IS NULL OR a.from_date <= %(d)s)",
@@ -2258,39 +2294,80 @@ def get_dashboard_data(
             h.hub_name, h.hub_code
         FROM `tab{ASSIGNMENT_DOCTYPE}` a
         INNER JOIN `tab{INCHARGE_DOCTYPE}` i ON i.name = a.hub_incharge
-        LEFT JOIN `tab{HUB_DOCTYPE}` h ON h.name = a.hub
+        INNER JOIN `tab{HUB_DOCTYPE}` h ON h.name = a.hub
         WHERE {" AND ".join(assignment_where)}
         ORDER BY i.incharge_name, a.hub
         """,
         params,
     )
+    assignment_owner = {}
     incharge_data = {}
     for row in assignment_rows:
+        owner = assignment_owner.get(row.hub)
+        if owner and owner != row.hub_incharge:
+            frappe.throw(
+                _("Multiple active incharges are assigned to Source hub {0} on {1}.")
+                .format(row.hub, snapshot_date),
+                frappe.ValidationError,
+            )
+        assignment_owner[row.hub] = row.hub_incharge
+
         item = incharge_data.setdefault(
             row.hub_incharge,
             {
                 "incharge": row.hub_incharge,
                 "incharge_name": row.incharge_name,
                 "assigned_hubs": [],
+                "hubs": [],
                 **{field: 0 for field in score_fields + ("loss_count", "loss_amount")},
                 "aging_weighted": 0.0,
             },
         )
         if row.hub not in item["assigned_hubs"]:
             item["assigned_hubs"].append(row.hub)
-            source = source_metrics.get(row.hub, {})
-            losses = source_losses.get(row.hub, {})
+            source = source_scorecard.get(row.hub)
+            if not source:
+                continue
+            item["hubs"].append(dict(source))
             for field in score_fields:
                 if field != "avg_aging":
-                    item[field] += flt(source.get(field))
+                    item[field] += flt(source[field])
             item["aging_weighted"] += (
-                flt(source.get("avg_aging")) * cint(source.get("total"))
+                flt(source["avg_aging"]) * cint(source["total"])
             )
-            item["loss_count"] += cint(losses.get("loss_count"))
-            item["loss_amount"] += flt(losses.get("loss_amount"))
+            item["loss_count"] += cint(source["loss_count"])
+            item["loss_amount"] += flt(source["loss_amount"])
+
+    unassigned_hubs = [
+        dict(row) for row in source_scorecard
+        if row["hub"] not in assignment_owner
+    ]
+    if unassigned_hubs:
+        item = incharge_data.setdefault(
+            None,
+            {
+                "incharge": None,
+                "incharge_name": _("Unassigned"),
+                "assigned_hubs": [],
+                "hubs": [],
+                **{field: 0 for field in score_fields + ("loss_count", "loss_amount")},
+                "aging_weighted": 0.0,
+            },
+        )
+        for source in unassigned_hubs:
+            item["assigned_hubs"].append(source["hub"])
+            item["hubs"].append(source)
+            for field in score_fields:
+                if field != "avg_aging":
+                    item[field] += flt(source[field])
+            item["aging_weighted"] += flt(source["avg_aging"]) * cint(source["total"])
+            item["loss_count"] += cint(source["loss_count"])
+            item["loss_amount"] += flt(source["loss_amount"])
+
     incharge_scorecard = []
     for item in incharge_data.values():
         item["assigned_hubs"].sort()
+        item["hubs"].sort(key=lambda row: str(row["hub_name"]).lower())
         item["assigned_hubs_text"] = ", ".join(item["assigned_hubs"])
         item["loss_value"] = round(item["loss_amount"], 2)
         item["loss_amount"] = round(item["loss_amount"], 2)
@@ -2301,23 +2378,21 @@ def get_dashboard_data(
         for field in score_fields:
             if field.endswith("amount"):
                 item[field] = round(item[field], 2)
+        for hub_row in item["hubs"]:
+            hub_row["loss_value"] = hub_row["loss_amount"]
         if not search_term or item["total"] or search_term.lower() in (
             item["incharge_name"] + " " + item["assigned_hubs_text"]
         ).lower():
             incharge_scorecard.append(item)
-    incharge_scorecard.sort(key=lambda row: row["incharge_name"].lower())
+    incharge_scorecard.sort(
+        key=lambda row: (row["incharge"] is None, row["incharge_name"].lower())
+    )
     incharge_scorecard_totals = {
-        field: round(sum(flt(row.get(field, 0)) for row in source_performance), 2)
-        if field.endswith("amount")
-        else sum(cint(row.get(field, 0)) for row in source_performance)
+        field: source_scorecard_totals[field]
         for field in score_fields + ("loss_count", "loss_amount")
     }
-    incharge_scorecard_totals["avg_aging"] = round(
-        sum(flt(row["avg_aging"]) * cint(row["total"]) for row in source_performance)
-        / incharge_scorecard_totals["total"],
-        2,
-    ) if incharge_scorecard_totals["total"] else 0
-    incharge_scorecard_totals["loss_value"] = incharge_scorecard_totals["loss_amount"]
+    incharge_scorecard_totals["avg_aging"] = source_scorecard_totals["avg_aging"]
+    incharge_scorecard_totals["loss_value"] = source_scorecard_totals["loss_amount"]
 
     # ---- risk and Loss Register -----------------------------------------
     risk = _sql(
@@ -2401,6 +2476,8 @@ def get_dashboard_data(
         "trend": trend,
         "hub_scorecard": hub_performance,
         "hub_scorecard_totals": scorecard_totals,
+        "source_scorecard": source_scorecard,
+        "source_scorecard_totals": source_scorecard_totals,
         "hub_performance": source_performance,
         "incharge_scorecard": incharge_scorecard,
         "incharge_scorecard_totals": incharge_scorecard_totals,
