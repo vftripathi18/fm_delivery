@@ -6,11 +6,11 @@ Daily Excel upload -> validation -> snapshot comparison (New / Pending / Cleared
 Business invariants enforced here
 ---------------------------------
 * Comparison key is (Source, ShipmentId). Source is the authorization boundary;
-  CurrentHub is operational only and never grants access.
+CurrentHub is operational only and never grants access.
 * due_month = brsnr_month + 2 calendar months, due_date = last day of due_month.
 * LOSS IS FINAL. Once Loss, never Cleared / Pending / Due Soon again, and
-  loss_date / loss_amount are never lost. loss_amount always comes from
-  total_price (never gmv).
+loss_date / loss_amount are never lost. loss_amount always comes from
+total_price (never gmv).
 * History is append-only. Previous snapshot = OPEN rows only (New / Pending).
 * Loss reporting is cumulative THROUGH the selected / trend date (loss_date <= date).
 """
@@ -18,6 +18,7 @@ Business invariants enforced here
 import calendar
 import hashlib
 import hmac
+import json
 import math
 import re
 import secrets
@@ -90,7 +91,8 @@ FIELD_TO_COLUMN = {v: k for k, v in COLUMN_MAP.items()}
 
 OPEN_STATUSES = ("New", "Pending")
 BRSNR_STATUSES = ("New", "Pending", "Cleared")
-CLEARANCE_STATUSES = ("Pending", "Due Soon", "Cleared", "Loss")
+CLEARANCE_STATUSES = ("Pending", "Due Soon", "Overdue", "Cleared", "Loss")
+RISK_LEVELS = ("Safe", "Watch", "Critical", "Loss")
 LIFECYCLE_FIELDS = (
     "brsnr_month",
     "due_month",
@@ -249,6 +251,45 @@ def _clean_choice(value, allowed, label):
     if value not in allowed:
         frappe.throw(_("Invalid {0} filter.").format(label))
     return value
+
+
+def _normalize_filter_list(value):
+    """Accept single values, comma-separated strings, and JSON arrays for multi-select filters."""
+    if value is None:
+        return []
+
+    if isinstance(value, (list, tuple, set)):
+        values = []
+        for item in value:
+            values.extend(_normalize_filter_list(item))
+        return values
+
+    if isinstance(value, str):
+        if value.strip() == "":
+            return []
+        text = value.strip()
+        if text.startswith("[") and text.endswith("]"):
+            try:
+                parsed = json.loads(text)
+                if isinstance(parsed, list):
+                    return _normalize_filter_list(parsed)
+            except Exception:
+                pass
+        return [part.strip() for part in re.split(r"[,;\n]+", text) if part.strip()]
+
+    return [str(value).strip()] if str(value).strip() else []
+
+
+def _clean_choices(value, allowed, label):
+    """Normalise a multi-select filter to a de-duped list of valid values."""
+    values = []
+    for item in _normalize_filter_list(value):
+        cleaned = _clean_choice(item, allowed, label)
+        if label == "clearance status" and cleaned == "Overdue":
+            cleaned = "Loss"
+        if cleaned and cleaned not in values:
+            values.append(cleaned)
+    return values
 
 
 # ---------------------------------------------------------------------------
@@ -621,7 +662,12 @@ def resolve_lifecycle(
 
     if already_loss:
         loss_date = _to_date(existing_loss_date) if existing_loss_date else calc["due_date"]
-        loss_amount = flt(_attr(existing, "loss_amount")) or flt(total_price)
+        stored_loss_amount = _attr(existing, "loss_amount")
+        loss_amount = (
+            flt(stored_loss_amount)
+            if stored_loss_amount is not None
+            else flt(total_price)
+        )
     else:
         loss_date = calc["loss_date"]
         loss_amount = flt(total_price)
@@ -671,13 +717,16 @@ def _guard_loss_final(master, values):
     if _attr(master, "clearance_status") != "Loss" and not old_loss_date:
         return
 
-    old_amount = flt(_attr(master, "loss_amount"))
+    old_amount = _attr(master, "loss_amount")
     new_date = values.get("loss_date")
     broken = (
         values.get("clearance_status") != "Loss"
         or not new_date
         or (old_loss_date and getdate(new_date) != getdate(old_loss_date))
-        or (old_amount and flt(values.get("loss_amount")) != old_amount)
+        or (
+            old_amount is not None
+            and flt(values.get("loss_amount")) != flt(old_amount)
+        )
     )
     if broken:
         frappe.throw(
@@ -1247,9 +1296,9 @@ def get_authorized_hubs(identity, as_of=None):
         SELECT hub, from_date, to_date
         FROM `tab{ASSIGNMENT_DOCTYPE}`
         WHERE hub_incharge = %(incharge)s
-          AND active = 1
-          AND (from_date IS NULL OR from_date <= %(d)s)
-          AND (to_date IS NULL OR to_date >= %(d)s)
+        AND active = 1
+        AND (from_date IS NULL OR from_date <= %(d)s)
+        AND (to_date IS NULL OR to_date >= %(d)s)
         """,
         {"incharge": identity["name"], "d": as_of},
         as_dict=True,
@@ -1527,7 +1576,10 @@ def get_portal_session(token=None):
 # Dashboard
 # ---------------------------------------------------------------------------
 
-_BM = "COALESCE(s.brsnr_month, DATE_SUB(h.brsnr_date, INTERVAL (DAYOFMONTH(h.brsnr_date) - 1) DAY))"
+_BM = (
+    "DATE_SUB(COALESCE(s.brsnr_month, h.brsnr_date), "
+    "INTERVAL (DAYOFMONTH(COALESCE(s.brsnr_month, h.brsnr_date)) - 1) DAY)"
+)
 
 _LOSS_COND = "b.brsnr_date > COALESCE(b.master_loss_date, b.due_date)"
 
@@ -1560,10 +1612,10 @@ def _snapshot_sql(date_cond):
         END AS days_remaining,
         CASE
             WHEN {_LOSS_COND}
-            THEN COALESCE(NULLIF(b.master_loss_amount, 0), b.total_price, 0)
+            THEN COALESCE(b.master_loss_amount, b.total_price, 0)
             ELSE 0
         END AS loss_amount
-     FROM (
+    FROM (
         SELECT
             h.name AS history_name, h.shipment, h.shipment_id, h.source,
             h.current_hub, h.status, h.brsnr_status, h.aging, h.aging_bucket,
@@ -1574,11 +1626,67 @@ def _snapshot_sql(date_cond):
             {_BM} AS brsnr_month,
             DATE_ADD({_BM}, INTERVAL 2 MONTH) AS due_month,
             LAST_DAY(DATE_ADD({_BM}, INTERVAL 2 MONTH)) AS due_date
-        FROM `tab{HISTORY_DOCTYPE}` h
+        FROM (
+            SELECT h.*,
+                ROW_NUMBER() OVER (
+                    PARTITION BY h.source, h.shipment_id, h.brsnr_date
+                    ORDER BY h.creation DESC, h.name DESC
+                ) AS history_rank
+            FROM `tab{HISTORY_DOCTYPE}` h
+            WHERE {date_cond} AND h.source IN %(hubs)s
+        ) h
         LEFT JOIN `tab{SHIPMENT_DOCTYPE}` s ON s.name = h.shipment
-        WHERE {date_cond} AND h.source IN %(hubs)s
-     ) b
+        WHERE h.history_rank = 1
+    ) b
     ) x
+    """
+
+
+def _loss_register_sql():
+    """Cumulative final Loss rows from masters, with historical snapshot details."""
+    loss_month = (
+        "DATE_SUB(COALESCE(m.brsnr_month, h.brsnr_date, m.brsnr_date), "
+        "INTERVAL (DAYOFMONTH(COALESCE(m.brsnr_month, h.brsnr_date, m.brsnr_date)) - 1) DAY)"
+    )
+    due_month = f"DATE_ADD({loss_month}, INTERVAL 2 MONTH)"
+    due_date = f"LAST_DAY({due_month})"
+    return f"""
+    (
+        SELECT
+            m.name, m.name AS shipment, m.shipment_id, m.source,
+            COALESCE(h.current_hub, m.current_hub) AS current_hub,
+            COALESCE(h.brsnr_status, m.brsnr_status) AS brsnr_status,
+            COALESCE(h.brsnr_date, m.brsnr_date) AS brsnr_date,
+            m.total_price,
+            COALESCE(m.loss_amount, m.total_price, 0) AS loss_amount,
+            m.partner, m.casper_id,
+            COALESCE(m.loss_date, {due_date}) AS loss_date,
+            {loss_month} AS brsnr_month,
+            {due_month} AS due_month
+        FROM `tab{SHIPMENT_DOCTYPE}` m
+        LEFT JOIN (
+            SELECT ranked.*
+            FROM (
+                SELECT h.*,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY h.source, h.shipment_id
+                        ORDER BY h.brsnr_date DESC, h.creation DESC, h.name DESC
+                    ) AS history_rank
+                FROM `tab{HISTORY_DOCTYPE}` h
+                WHERE h.brsnr_date <= %(d)s AND h.source IN %(hubs)s
+            ) ranked
+            WHERE ranked.history_rank = 1
+        ) h ON h.shipment = m.name
+        WHERE m.source IN %(hubs)s
+        AND (
+            (m.loss_date IS NOT NULL AND m.loss_date <= %(d)s)
+            OR (
+                m.clearance_status = 'Loss'
+                AND m.loss_date IS NULL
+                AND %(d)s > {due_date}
+            )
+        )
+    ) l
     """
 
 
@@ -1595,10 +1703,23 @@ def _empty_summary():
         "total": 0, "new": 0, "pending": 0, "cleared": 0,
         "clearance_percentage": 0, "due_soon": 0, "loss": 0,
         "loss_value": 0, "avg_aging": 0, "average_aging": 0,
+        "watch": 0, "watch_value": 0, "critical": 0, "critical_value": 0,
     }
 
 
 def _empty_dashboard(identity, hubs, snapshot_date, latest_date, hub_options=None):
+    empty_risk = {
+        level: {"count": 0, "amount": 0}
+        for level in ("Watch", "Critical", "Loss")
+    }
+    empty_scorecard_totals = {
+        "total": 0, "new_count": 0, "pending_count": 0, "cleared_count": 0,
+        "due_soon_count": 0, "watch_count": 0, "critical_count": 0,
+        "new_amount": 0, "pending_amount": 0, "cleared_amount": 0,
+        "due_soon_amount": 0, "watch_amount": 0, "critical_amount": 0,
+        "total_amount": 0, "loss_count": 0, "loss_amount": 0,
+        "loss_value": 0, "avg_aging": 0,
+    }
     return {
         "success": True,
         "role": identity["type"],
@@ -1609,12 +1730,19 @@ def _empty_dashboard(identity, hubs, snapshot_date, latest_date, hub_options=Non
         "brsnr_date": snapshot_date,
         "latest_brsnr_date": latest_date,
         "summary": _empty_summary(),
+        "risk_summary": empty_risk,
         "records": [],
         "records_total": 0,
         "trend": [],
+        "hub_scorecard": [],
+        "hub_scorecard_totals": empty_scorecard_totals,
         "hub_performance": [],
+        "incharge_scorecard": [],
+        "incharge_scorecard_totals": dict(empty_scorecard_totals),
         "risk": [],
         "loss_register": [],
+        "loss_register_total": 0,
+        "loss_register_start": 0,
     }
 
 
@@ -1641,11 +1769,15 @@ def get_dashboard_data(
     from_date=None,
     to_date=None,
     hub=None,
+    current_hub=None,
     status=None,
     clearance_status=None,
+    risk_level=None,
     search=None,
     limit=500,
     start=0,
+    loss_limit=LOSS_REGISTER_LIMIT,
+    loss_start=0,
     sort_by=None,
     sort_order=None,
     token=None,
@@ -1665,8 +1797,13 @@ def get_dashboard_data(
     """
     identity = require_portal_identity(token)
 
-    status = _clean_choice(status, BRSNR_STATUSES, "status")
-    clearance_status = _clean_choice(clearance_status, CLEARANCE_STATUSES, "clearance status")
+    status_values = _clean_choices(status, BRSNR_STATUSES, "status")
+    clearance_values = _clean_choices(
+        clearance_status,
+        CLEARANCE_STATUSES,
+        "clearance status",
+    )
+    risk_values = _clean_choices(risk_level, RISK_LEVELS, "risk level")
 
     from_req = _parse_date(from_date, "from date")
     to_req = _parse_date(to_date, "to date")
@@ -1685,9 +1822,18 @@ def get_dashboard_data(
 
     # The hub filter can never escape the server-side scope.
     selected = authorized
-    if hub and str(hub).strip().lower() not in ("", "all"):
-        requested = [h.strip() for h in str(hub).split(",") if h.strip()][:200]
-        selected = [h for h in requested if h in authorized]
+    requested_hubs = _normalize_filter_list(hub)
+    if requested_hubs and any(item.strip().lower() not in ("", "all") for item in requested_hubs):
+        authorized_lookup = {str(h).strip().lower(): h for h in authorized}
+        requested = []
+        for item in requested_hubs:
+            key = str(item).strip().lower()
+            if not key or key == "all":
+                continue
+            match = authorized_lookup.get(key)
+            if match and match not in requested:
+                requested.append(match)
+        selected = requested
         if not selected:
             frappe.throw(_("You are not authorized for the selected hub."), frappe.PermissionError)
 
@@ -1704,6 +1850,61 @@ def get_dashboard_data(
         "rt": range_to,
         "tf": trend_from,
     }
+    if status_values:
+        params["status"] = tuple(status_values)
+    if clearance_values:
+        params["clearance"] = tuple(clearance_values)
+    if risk_values:
+        params["risk"] = tuple(risk_values)
+
+    status_filter_sql = " AND x.brsnr_status IN %(status)s" if status_values else ""
+    clearance_filter_sql = " AND x.clearance_status IN %(clearance)s" if clearance_values else ""
+    risk_filter_sql = " AND x.risk_level IN %(risk)s" if risk_values else ""
+    current_hub_values = _normalize_filter_list(current_hub)
+    if current_hub_values:
+        params["current_hubs"] = tuple(current_hub_values)
+    current_hub_filter_sql = (
+        " AND COALESCE(NULLIF(x.current_hub, ''), '(Unassigned)') IN %(current_hubs)s"
+        if current_hub_values else ""
+    )
+
+    search_term = str(search or "").strip()[:100]
+    if search_term:
+        escaped = search_term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        params["q"] = f"%{escaped}%"
+        search_filter_sql = (
+            " AND (x.shipment_id LIKE %(q)s OR x.source LIKE %(q)s "
+            "OR x.current_hub LIKE %(q)s OR s.casper_id LIKE %(q)s "
+            "OR s.partner LIKE %(q)s)"
+        )
+    else:
+        search_filter_sql = ""
+
+    snapshot_filter_sql = (
+        f"{status_filter_sql}{clearance_filter_sql}"
+        f"{risk_filter_sql}{current_hub_filter_sql}{search_filter_sql}"
+    )
+
+    loss_filters = []
+    if status_values:
+        loss_filters.append("l.brsnr_status IN %(status)s")
+    if clearance_values and "Loss" not in clearance_values:
+        loss_filters.append("1 = 0")
+    if risk_values and "Loss" not in risk_values:
+        loss_filters.append("1 = 0")
+    if current_hub_values:
+        loss_filters.append(
+            "COALESCE(NULLIF(l.current_hub, ''), '(Unassigned)') IN %(current_hubs)s"
+        )
+    if search_term:
+        loss_filters.append(
+            "(l.shipment_id LIKE %(q)s OR l.source LIKE %(q)s "
+            "OR l.current_hub LIKE %(q)s OR l.partner LIKE %(q)s "
+            "OR l.casper_id LIKE %(q)s)"
+        )
+    loss_filter_sql = (
+        " AND " + " AND ".join(loss_filters) if loss_filters else ""
+    )
 
     # ---- summary ---------------------------------------------------------
     snap = _sql(
@@ -1715,6 +1916,8 @@ def get_dashboard_data(
             COALESCE(SUM(CASE WHEN x.clearance_status = 'Due Soon' THEN 1 ELSE 0 END), 0) AS due_soon,
             COALESCE(AVG(x.aging), 0) AS avg_aging
         FROM {_SNAP_ONE}
+        LEFT JOIN `tab{SHIPMENT_DOCTYPE}` s ON s.name = x.shipment
+        WHERE 1 = 1 {snapshot_filter_sql}
         """,
         params,
     )
@@ -1724,28 +1927,65 @@ def get_dashboard_data(
         r.brsnr_status: cint(r.c)
         for r in _sql(
             f"""
-            SELECT brsnr_status, COUNT(*) AS c
-            FROM `tab{HISTORY_DOCTYPE}`
-            WHERE source IN %(hubs)s AND brsnr_date BETWEEN %(rf)s AND %(rt)s
-            GROUP BY brsnr_status
+            SELECT x.brsnr_status, COUNT(DISTINCT x.shipment, x.brsnr_date) AS c
+            FROM {_SNAP_TREND}
+            LEFT JOIN `tab{SHIPMENT_DOCTYPE}` s ON s.name = x.shipment
+            WHERE 1 = 1 {snapshot_filter_sql}
+            GROUP BY x.brsnr_status
             """,
             params,
         )
     }
 
-    # Cumulative Loss THROUGH the selected date (inclusive).
-    loss_events = _sql(
+    loss_summary_rows = _sql(
         f"""
-        SELECT loss_date, COUNT(*) AS c, COALESCE(SUM(loss_amount), 0) AS v
-        FROM `tab{SHIPMENT_DOCTYPE}`
-        WHERE source IN %(hubs)s AND loss_date IS NOT NULL AND loss_date <= %(d)s
-        GROUP BY loss_date
-        ORDER BY loss_date ASC
+        SELECT COUNT(*) AS loss_count,
+            COALESCE(SUM(l.loss_amount), 0) AS loss_value
+        FROM {_loss_register_sql()}
+        WHERE 1 = 1 {loss_filter_sql}
         """,
         params,
     )
-    loss_count = sum(cint(e.c) for e in loss_events)
-    loss_value = sum(flt(e.v) for e in loss_events)
+    loss_summary = loss_summary_rows[0] if loss_summary_rows else {}
+    loss_count = cint(loss_summary.get("loss_count"))
+    loss_value = flt(loss_summary.get("loss_value"))
+
+    risk_rows = _sql(
+        f"""
+        SELECT x.risk_level, COUNT(DISTINCT x.shipment) AS record_count,
+            COALESCE(SUM(COALESCE(x.total_price, 0)), 0) AS amount
+        FROM {_SNAP_ONE}
+        LEFT JOIN `tab{SHIPMENT_DOCTYPE}` s ON s.name = x.shipment
+        WHERE x.risk_level IN ('Watch', 'Critical')
+        AND 1 = 1 {snapshot_filter_sql}
+        GROUP BY x.risk_level
+        """,
+        params,
+    )
+    risk_summary = {
+        level: {"count": 0, "amount": 0.0}
+        for level in ("Watch", "Critical", "Loss")
+    }
+    for row in risk_rows:
+        risk_summary[row.risk_level] = {
+            "count": cint(row.record_count),
+            "amount": round(flt(row.amount), 2),
+        }
+    risk_summary["Loss"] = {
+        "count": loss_count,
+        "amount": round(loss_value, 2),
+    }
+    loss_events = _sql(
+        f"""
+        SELECT l.loss_date, COUNT(*) AS c,
+            COALESCE(SUM(l.loss_amount), 0) AS v
+        FROM {_loss_register_sql()}
+        WHERE 1 = 1 {loss_filter_sql}
+        GROUP BY l.loss_date
+        ORDER BY l.loss_date ASC
+        """,
+        params,
+    )
 
     cleared_range = events.get("Cleared", 0)
     open_count = cint(snap.get("open_count"))
@@ -1763,27 +2003,13 @@ def get_dashboard_data(
         "loss_value": round(loss_value, 2),
         "avg_aging": avg_aging,
         "average_aging": avg_aging,
+        "watch": risk_summary["Watch"]["count"],
+        "watch_value": risk_summary["Watch"]["amount"],
+        "critical": risk_summary["Critical"]["count"],
+        "critical_value": risk_summary["Critical"]["amount"],
     }
 
     # ---- records ---------------------------------------------------------
-    where = []
-    if status:
-        where.append("x.brsnr_status = %(status)s")
-        params["status"] = status
-    if clearance_status:
-        where.append("x.clearance_status = %(cs)s")
-        params["cs"] = clearance_status
-    if search:
-        term = str(search).strip()[:100]
-        if term:
-            escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            params["q"] = f"%{escaped}%"
-            where.append(
-                "(x.shipment_id LIKE %(q)s OR s.casper_id LIKE %(q)s "
-                "OR s.partner LIKE %(q)s OR x.current_hub LIKE %(q)s)"
-            )
-    where_sql = (" AND " + " AND ".join(where)) if where else ""
-
     sort_expr = SORTABLE_FIELDS.get(str(sort_by or ""), "x.aging")
     direction = "ASC" if str(sort_order or "").lower() == "asc" else "DESC"
 
@@ -1805,11 +2031,11 @@ def get_dashboard_data(
             IF(x.brsnr_status = 'Cleared', x.brsnr_date, NULL) AS cleared_date,
             x.brsnr_month, x.due_month, x.clearance_status,
             CASE WHEN x.clearance_status = 'Loss'
-                 THEN COALESCE(x.master_loss_date, x.due_date) END AS loss_date,
+                THEN COALESCE(x.master_loss_date, x.due_date) END AS loss_date,
             x.loss_amount, x.days_remaining, x.risk_level
         FROM {_SNAP_ONE}
         LEFT JOIN `tab{SHIPMENT_DOCTYPE}` s ON s.name = x.shipment
-        WHERE 1 = 1 {where_sql}
+        WHERE 1 = 1 {snapshot_filter_sql}
         ORDER BY {sort_expr} {direction}, x.shipment_id ASC
         LIMIT %(lim)s OFFSET %(off)s
         """,
@@ -1821,7 +2047,7 @@ def get_dashboard_data(
         SELECT COUNT(*) AS c
         FROM {_SNAP_ONE}
         LEFT JOIN `tab{SHIPMENT_DOCTYPE}` s ON s.name = x.shipment
-        WHERE 1 = 1 {where_sql}
+        WHERE 1 = 1 {snapshot_filter_sql}
         """,
         params,
     )
@@ -1832,132 +2058,320 @@ def get_dashboard_data(
         f"""
         SELECT
             x.brsnr_date,
-            COUNT(*) AS total,
+            COUNT(DISTINCT x.shipment) AS total,
             COALESCE(SUM(CASE WHEN x.brsnr_status = 'New' THEN 1 ELSE 0 END), 0) AS new_count,
             COALESCE(SUM(CASE WHEN x.brsnr_status = 'Pending' THEN 1 ELSE 0 END), 0) AS pending_count,
             COALESCE(SUM(CASE WHEN x.brsnr_status = 'Cleared' THEN 1 ELSE 0 END), 0) AS cleared_count,
             COALESCE(SUM(CASE WHEN x.clearance_status = 'Due Soon' THEN 1 ELSE 0 END), 0) AS due_soon
         FROM {_SNAP_TREND}
+        LEFT JOIN `tab{SHIPMENT_DOCTYPE}` s ON s.name = x.shipment
+        WHERE 1 = 1 {snapshot_filter_sql}
         GROUP BY x.brsnr_date
         ORDER BY x.brsnr_date ASC
         """,
         params,
     )
-
-    # Loss events before the trend window must seed the running totals.
     pointer = 0
-    running_count = 0
-    running_value = 0.0
+    running_loss_count = 0
+    running_loss_amount = 0.0
     for point in trend:
         point_date = getdate(point.brsnr_date)
-        # inclusive: a Loss occurring ON the trend date counts for that date
-        while pointer < len(loss_events) and getdate(loss_events[pointer].loss_date) <= point_date:
-            running_count += cint(loss_events[pointer].c)
-            running_value += flt(loss_events[pointer].v)
+        while (
+            pointer < len(loss_events)
+            and getdate(loss_events[pointer].loss_date) <= point_date
+        ):
+            running_loss_count += cint(loss_events[pointer].c)
+            running_loss_amount += flt(loss_events[pointer].v)
             pointer += 1
-        point["loss_count"] = running_count
-        point["loss_value"] = round(running_value, 2)
+        point["loss_count"] = running_loss_count
+        point["loss_value"] = round(running_loss_amount, 2)
 
-    # ---- hub performance --------------------------------------------------
-    hub_snapshot = _sql(
-        f"""
-        SELECT
-            x.source AS hub,
-            COUNT(*) AS total,
-            COALESCE(SUM(CASE WHEN x.brsnr_status = 'Pending' THEN 1 ELSE 0 END), 0) AS pending_count,
-            COALESCE(AVG(x.aging), 0) AS avg_aging
-        FROM {_SNAP_ONE}
-        GROUP BY x.source
-        """,
-        params,
-    )
-    hub_events = _sql(
-        f"""
-        SELECT source AS hub, brsnr_status, COUNT(*) AS c
-        FROM `tab{HISTORY_DOCTYPE}`
-        WHERE source IN %(hubs)s AND brsnr_date BETWEEN %(rf)s AND %(rt)s
-          AND brsnr_status IN ('New', 'Cleared')
-        GROUP BY source, brsnr_status
-        """,
-        params,
-    )
-    hub_losses = _sql(
-        f"""
-        SELECT source AS hub, COUNT(*) AS c, COALESCE(SUM(loss_amount), 0) AS v
-        FROM `tab{SHIPMENT_DOCTYPE}`
-        WHERE source IN %(hubs)s AND loss_date IS NOT NULL AND loss_date <= %(d)s
-        GROUP BY source
-        """,
-        params,
-    )
-
-    hub_names = {o["name"]: o.get("hub_name") for o in options}
-    performance = {}
-
-    def _perf(hub_code):
-        return performance.setdefault(
-            hub_code,
-            {
-                "hub": hub_code, "hub_name": hub_names.get(hub_code),
-                "total": 0, "new_count": 0, "pending_count": 0, "cleared_count": 0,
-                "loss_count": 0, "loss_value": 0, "avg_aging": 0,
-            },
+    # ---- scorecards ------------------------------------------------------
+    def _score_query(group_expression):
+        return _sql(
+            f"""
+            SELECT {group_expression} AS hub,
+                COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN x.brsnr_status = 'New' THEN 1 ELSE 0 END), 0) AS new_count,
+                COALESCE(SUM(CASE WHEN x.brsnr_status = 'Pending' THEN 1 ELSE 0 END), 0) AS pending_count,
+                COALESCE(SUM(CASE WHEN x.brsnr_status = 'Cleared' THEN 1 ELSE 0 END), 0) AS cleared_count,
+                COALESCE(SUM(CASE WHEN x.clearance_status = 'Due Soon' THEN 1 ELSE 0 END), 0) AS due_soon_count,
+                COALESCE(SUM(CASE WHEN x.risk_level = 'Watch' THEN 1 ELSE 0 END), 0) AS watch_count,
+                COALESCE(SUM(CASE WHEN x.risk_level = 'Critical' THEN 1 ELSE 0 END), 0) AS critical_count,
+                COALESCE(SUM(CASE WHEN x.brsnr_status = 'New' THEN COALESCE(x.total_price, 0) ELSE 0 END), 0) AS new_amount,
+                COALESCE(SUM(CASE WHEN x.brsnr_status = 'Pending' THEN COALESCE(x.total_price, 0) ELSE 0 END), 0) AS pending_amount,
+                COALESCE(SUM(CASE WHEN x.brsnr_status = 'Cleared' THEN COALESCE(x.total_price, 0) ELSE 0 END), 0) AS cleared_amount,
+                COALESCE(SUM(CASE WHEN x.clearance_status = 'Due Soon' THEN COALESCE(x.total_price, 0) ELSE 0 END), 0) AS due_soon_amount,
+                COALESCE(SUM(CASE WHEN x.risk_level = 'Watch' THEN COALESCE(x.total_price, 0) ELSE 0 END), 0) AS watch_amount,
+                COALESCE(SUM(CASE WHEN x.risk_level = 'Critical' THEN COALESCE(x.total_price, 0) ELSE 0 END), 0) AS critical_amount,
+                COALESCE(SUM(COALESCE(x.total_price, 0)), 0) AS total_amount,
+                COALESCE(AVG(x.aging), 0) AS avg_aging
+            FROM {_SNAP_ONE}
+            LEFT JOIN `tab{SHIPMENT_DOCTYPE}` s ON s.name = x.shipment
+            WHERE 1 = 1 {snapshot_filter_sql}
+            GROUP BY {group_expression}
+            """,
+            params,
         )
 
-    for r in hub_snapshot:
-        p = _perf(r.hub)
-        p["total"] = cint(r.total)
-        p["pending_count"] = cint(r.pending_count)
-        p["avg_aging"] = round(flt(r.avg_aging), 2)
-    for r in hub_events:
-        p = _perf(r.hub)
-        p["new_count" if r.brsnr_status == "New" else "cleared_count"] = cint(r.c)
-    for r in hub_losses:
-        p = _perf(r.hub)
-        p["loss_count"] = cint(r.c)
-        p["loss_value"] = round(flt(r.v), 2)
-
-    hub_performance = sorted(
-        performance.values(),
-        key=lambda p: (-p["pending_count"], -p["loss_count"]),
+    loss_by_current_hub = _sql(
+        f"""
+        SELECT COALESCE(NULLIF(l.current_hub, ''), '(Unassigned)') AS hub,
+            COUNT(*) AS loss_count, COALESCE(SUM(l.loss_amount), 0) AS loss_amount
+        FROM {_loss_register_sql()}
+        WHERE 1 = 1 {loss_filter_sql}
+        GROUP BY COALESCE(NULLIF(l.current_hub, ''), '(Unassigned)')
+        """,
+        params,
+    )
+    loss_by_source = _sql(
+        f"""
+        SELECT l.source AS hub, COUNT(*) AS loss_count,
+            COALESCE(SUM(l.loss_amount), 0) AS loss_amount
+        FROM {_loss_register_sql()}
+        WHERE 1 = 1 {loss_filter_sql}
+        GROUP BY l.source
+        """,
+        params,
     )
 
-    # ---- risk (snapshot) --------------------------------------------------
+    hub_performance = {}
+    score_fields = (
+        "total", "new_count", "pending_count", "cleared_count",
+        "due_soon_count", "watch_count", "critical_count",
+        "new_amount", "pending_amount", "cleared_amount", "due_soon_amount",
+        "watch_amount", "critical_amount", "total_amount", "avg_aging",
+    )
+    for row in _score_query("COALESCE(NULLIF(x.current_hub, ''), '(Unassigned)')"):
+        hub_performance[row.hub] = {
+            "hub": row.hub,
+            "hub_name": row.hub,
+            **{field: round(flt(row.get(field)), 2) if field.endswith("amount") or field == "avg_aging"
+               else cint(row.get(field)) for field in score_fields},
+            "loss_count": 0,
+            "loss_amount": 0.0,
+        }
+    for row in loss_by_current_hub:
+        score = hub_performance.setdefault(
+            row.hub,
+            {
+                "hub": row.hub, "hub_name": row.hub,
+                **{field: 0 for field in score_fields},
+                "loss_count": 0, "loss_amount": 0.0,
+            },
+        )
+        score["loss_count"] = cint(row.loss_count)
+        score["loss_amount"] = round(flt(row.loss_amount), 2)
+    for score in hub_performance.values():
+        score["loss_value"] = score["loss_amount"]
+        denominator = score["cleared_count"] + score["pending_count"]
+        score["clearance_percentage"] = (
+            round(score["cleared_count"] / denominator * 100, 2) if denominator else 0
+        )
+    hub_performance = sorted(
+        hub_performance.values(),
+        key=lambda row: (-row["total"], str(row["hub"]).lower()),
+    )
+
+    scorecard_totals = {
+        field: round(sum(flt(row[field]) for row in hub_performance), 2)
+        if field.endswith("amount")
+        else sum(cint(row[field]) for row in hub_performance)
+        for field in score_fields + ("loss_count", "loss_amount")
+    }
+    scorecard_totals["avg_aging"] = round(
+        sum(flt(row["avg_aging"]) * cint(row["total"]) for row in hub_performance)
+        / scorecard_totals["total"],
+        2,
+    ) if scorecard_totals["total"] else 0
+    scorecard_totals["loss_value"] = scorecard_totals["loss_amount"]
+
+    source_metrics = {
+        row.hub: {field: row.get(field) for field in score_fields}
+        for row in _score_query("x.source")
+    }
+    source_losses = {
+        row.hub: {
+            "loss_count": cint(row.loss_count),
+            "loss_amount": round(flt(row.loss_amount), 2),
+        }
+        for row in loss_by_source
+    }
+    source_names = {row["name"]: row.get("hub_name") for row in options}
+    source_performance = {}
+    for source, metrics in source_metrics.items():
+        source_performance[source] = {
+            "hub": source,
+            "hub_name": source_names.get(source),
+            **{
+                field: round(flt(metrics.get(field)), 2)
+                if field.endswith("amount") or field == "avg_aging"
+                else cint(metrics.get(field))
+                for field in score_fields
+            },
+            "loss_count": 0,
+            "loss_amount": 0.0,
+            "loss_value": 0.0,
+        }
+    for source, loss in source_losses.items():
+        score = source_performance.setdefault(
+            source,
+            {
+                "hub": source,
+                "hub_name": source_names.get(source),
+                "total": 0,
+                "new_count": 0,
+                "pending_count": 0,
+                "cleared_count": 0,
+                "loss_count": 0,
+                "loss_amount": 0.0,
+                "loss_value": 0.0,
+                "avg_aging": 0,
+            },
+        )
+        score["loss_count"] = loss["loss_count"]
+        score["loss_amount"] = loss["loss_amount"]
+        score["loss_value"] = loss["loss_amount"]
+    for score in source_performance.values():
+        denominator = score["cleared_count"] + score["pending_count"]
+        score["clearance_percentage"] = (
+            round(score["cleared_count"] / denominator * 100, 2) if denominator else 0
+        )
+    source_performance = sorted(
+        source_performance.values(),
+        key=lambda row: (-row["pending_count"], -row["loss_count"]),
+    )
+
+    assignment_where = [
+        "a.active = 1",
+        "(a.from_date IS NULL OR a.from_date <= %(d)s)",
+        "(a.to_date IS NULL OR a.to_date >= %(d)s)",
+        "i.active = 1",
+        "a.hub IN %(hubs)s",
+    ]
+    if identity["type"] == "Incharge":
+        assignment_where.append("a.hub_incharge = %(incharge)s")
+        params["incharge"] = identity["name"]
+    assignment_rows = _sql(
+        f"""
+        SELECT DISTINCT a.hub_incharge, i.incharge_name, a.hub,
+            h.hub_name, h.hub_code
+        FROM `tab{ASSIGNMENT_DOCTYPE}` a
+        INNER JOIN `tab{INCHARGE_DOCTYPE}` i ON i.name = a.hub_incharge
+        LEFT JOIN `tab{HUB_DOCTYPE}` h ON h.name = a.hub
+        WHERE {" AND ".join(assignment_where)}
+        ORDER BY i.incharge_name, a.hub
+        """,
+        params,
+    )
+    incharge_data = {}
+    for row in assignment_rows:
+        item = incharge_data.setdefault(
+            row.hub_incharge,
+            {
+                "incharge": row.hub_incharge,
+                "incharge_name": row.incharge_name,
+                "assigned_hubs": [],
+                **{field: 0 for field in score_fields + ("loss_count", "loss_amount")},
+                "aging_weighted": 0.0,
+            },
+        )
+        if row.hub not in item["assigned_hubs"]:
+            item["assigned_hubs"].append(row.hub)
+            source = source_metrics.get(row.hub, {})
+            losses = source_losses.get(row.hub, {})
+            for field in score_fields:
+                if field != "avg_aging":
+                    item[field] += flt(source.get(field))
+            item["aging_weighted"] += (
+                flt(source.get("avg_aging")) * cint(source.get("total"))
+            )
+            item["loss_count"] += cint(losses.get("loss_count"))
+            item["loss_amount"] += flt(losses.get("loss_amount"))
+    incharge_scorecard = []
+    for item in incharge_data.values():
+        item["assigned_hubs"].sort()
+        item["assigned_hubs_text"] = ", ".join(item["assigned_hubs"])
+        item["loss_value"] = round(item["loss_amount"], 2)
+        item["loss_amount"] = round(item["loss_amount"], 2)
+        item["avg_aging"] = round(
+            item["aging_weighted"] / item["total"], 2
+        ) if item["total"] else 0
+        del item["aging_weighted"]
+        for field in score_fields:
+            if field.endswith("amount"):
+                item[field] = round(item[field], 2)
+        if not search_term or item["total"] or search_term.lower() in (
+            item["incharge_name"] + " " + item["assigned_hubs_text"]
+        ).lower():
+            incharge_scorecard.append(item)
+    incharge_scorecard.sort(key=lambda row: row["incharge_name"].lower())
+    incharge_scorecard_totals = {
+        field: round(sum(flt(row.get(field, 0)) for row in source_performance), 2)
+        if field.endswith("amount")
+        else sum(cint(row.get(field, 0)) for row in source_performance)
+        for field in score_fields + ("loss_count", "loss_amount")
+    }
+    incharge_scorecard_totals["avg_aging"] = round(
+        sum(flt(row["avg_aging"]) * cint(row["total"]) for row in source_performance)
+        / incharge_scorecard_totals["total"],
+        2,
+    ) if incharge_scorecard_totals["total"] else 0
+    incharge_scorecard_totals["loss_value"] = incharge_scorecard_totals["loss_amount"]
+
+    # ---- risk and Loss Register -----------------------------------------
     risk = _sql(
         f"""
-        SELECT
-            x.shipment_id, x.source, x.current_hub, x.total_price, x.aging,
-            x.brsnr_month, x.due_month, x.clearance_status, x.loss_amount,
-            x.days_remaining, x.risk_level
+        SELECT x.shipment AS name, x.shipment_id, x.source, x.current_hub,
+            x.total_price, x.aging, x.brsnr_month, x.due_month,
+            x.clearance_status, x.loss_amount, x.days_remaining, x.risk_level
         FROM {_SNAP_ONE}
-        WHERE x.risk_level IN ('Critical', 'Loss')
-        ORDER BY CASE WHEN x.risk_level = 'Loss' THEN 0 ELSE 1 END, x.aging DESC
+        LEFT JOIN `tab{SHIPMENT_DOCTYPE}` s ON s.name = x.shipment
+        WHERE x.risk_level IN ('Watch', 'Critical')
+        AND 1 = 1 {snapshot_filter_sql}
+        ORDER BY CASE WHEN x.risk_level = 'Critical' THEN 0 ELSE 1 END,
+            x.aging DESC, x.shipment_id ASC
         LIMIT 100
         """,
         params,
     )
-
-    # ---- cumulative Loss Register (master lifecycle, not today's snapshot) -
-    loss_register = frappe.get_all(
-        SHIPMENT_DOCTYPE,
-        filters={
-            "source": ["in", selected],
-            "loss_date": ["<=", snapshot_date],
-        },
-        fields=[
-            "name", "shipment_id", "source", "current_hub", "total_price",
-            "loss_amount", "loss_date", "brsnr_month",
-            "brsnr_status", "cleared_date", "clearance_status",
-        ],
-        order_by="loss_date desc, loss_amount desc",
-        limit_page_length=LOSS_REGISTER_LIMIT,
+    loss_total_rows = _sql(
+        f"""
+        SELECT COUNT(*) AS c
+        FROM {_loss_register_sql()}
+        WHERE 1 = 1 {loss_filter_sql}
+        """,
+        params,
     )
-    for row in loss_register:
-        row["due_month"] = (
-            get_due_dates(row["brsnr_month"])[1]
-            if row.get("brsnr_month")
-            else None
-        )
+    loss_register_total = cint(loss_total_rows[0].c) if loss_total_rows else 0
+    loss_page_limit = min(max(cint(loss_limit or LOSS_REGISTER_LIMIT), 1), MAX_PAGE_LIMIT)
+    loss_page_start = max(cint(loss_start or 0), 0)
+    loss_page_params = {
+        **params,
+        "loss_lim": loss_page_limit,
+        "loss_off": loss_page_start,
+    }
+    loss_sortable = {
+        "loss_date": "l.loss_date",
+        "loss_amount": "l.loss_amount",
+        "total_price": "l.total_price",
+        "shipment_id": "l.shipment_id",
+        "source": "l.source",
+        "current_hub": "l.current_hub",
+        "brsnr_status": "l.brsnr_status",
+    }
+    loss_sort_expr = loss_sortable.get(str(sort_by or ""), "l.loss_date")
+    loss_sort_direction = "ASC" if str(sort_order or "").lower() == "asc" else "DESC"
+    loss_register = _sql(
+        f"""
+        SELECT l.*
+        FROM {_loss_register_sql()}
+        WHERE 1 = 1 {loss_filter_sql}
+        ORDER BY {loss_sort_expr} {loss_sort_direction}, l.shipment_id ASC
+        LIMIT %(loss_lim)s OFFSET %(loss_off)s
+        """,
+        loss_page_params,
+    )
 
     return {
         "success": True,
@@ -1974,15 +2388,24 @@ def get_dashboard_data(
             "from_date": range_from,
             "to_date": range_to,
             "hub": hub,
+            "current_hub": current_hub,
             "status": status,
             "clearance_status": clearance_status,
+            "risk_level": risk_level,
             "search": search,
         },
         "summary": summary,
+        "risk_summary": risk_summary,
         "records": records,
         "records_total": records_total,
         "trend": trend,
-        "hub_performance": hub_performance,
+        "hub_scorecard": hub_performance,
+        "hub_scorecard_totals": scorecard_totals,
+        "hub_performance": source_performance,
+        "incharge_scorecard": incharge_scorecard,
+        "incharge_scorecard_totals": incharge_scorecard_totals,
         "risk": risk,
         "loss_register": loss_register,
+        "loss_register_total": loss_register_total,
+        "loss_register_start": loss_page_start,
     }

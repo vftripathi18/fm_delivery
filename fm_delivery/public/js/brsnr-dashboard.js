@@ -17,7 +17,6 @@ frappe.ready(function () {
   var MAX_PAGE_LIMIT = 2000;
   var RISK_LIMIT = 100;
   var LOSS_REGISTER_LIMIT = 1000;
-  var MAX_REPORT_ROWS = 50000;
 
   var SORTABLE = {
     aging: 1, total_price: 1, shipment_id: 1, source: 1, current_hub: 1,
@@ -381,7 +380,7 @@ frappe.ready(function () {
     cleared: "Cleared",
     risk: "Risk Monitor",
     analytics: "Analytics",
-    hubperf: "Hub Performance",
+    hubperf: "Hub & Incharge Scorecards",
     history: "History",
     reports: "Reports",
     profile: "Profile"
@@ -389,7 +388,6 @@ frappe.ready(function () {
 
   var NO_FILTERBAR = {
     history: 1,
-    reports: 1,
     profile: 1
   };
 
@@ -411,8 +409,10 @@ frappe.ready(function () {
       from: "",
       to: "",
       hub: "",
+      currentHub: "",
       status: "",
       clearance: "",
+      riskLevel: "",
       search: "",
       range: ""
     },
@@ -433,6 +433,10 @@ frappe.ready(function () {
     },
 
     pendSort: "aging:desc",
+    scoreSort: {
+      hub: "total:desc",
+      incharge: "total:desc"
+    },
     dates: []
   };
 
@@ -1416,7 +1420,7 @@ frappe.ready(function () {
     "<th>Current Hub</th>" +
     '<th class="brsnr-num">Aging</th>' +
     '<th class="brsnr-num">Days left</th>' +
-    '<th class="brsnr-num">Total price</th>' +
+    '<th class="brsnr-num">Shipment value / Loss amount</th>' +
     "<th>Risk</th>" +
     "</tr>";
 
@@ -1636,11 +1640,13 @@ frappe.ready(function () {
   function dashArgs(extra) {
     var a = {
       hub: S.f.hub,
+      current_hub: S.f.currentHub,
       from_date: S.f.from,
       to_date: S.f.to,
       status: S.f.status,
       clearance_status:
         S.f.clearance,
+      risk_level: S.f.riskLevel,
       search: S.f.search,
       limit: MAX_PAGE_LIMIT,
       start: 0
@@ -1685,10 +1691,12 @@ frappe.ready(function () {
   function dataKey() {
     return JSON.stringify({
       hub: S.f.hub,
+      currentHub: S.f.currentHub,
       from: S.f.from,
       to: S.f.to,
       status: S.f.status,
       clearance: S.f.clearance,
+      riskLevel: S.f.riskLevel,
       search: S.f.search
     });
   }
@@ -1945,38 +1953,27 @@ frappe.ready(function () {
     id,
     d
   ) {
-    var r =
-      d.risk || [];
-
+    var metrics = d.risk_summary || {};
     var counts = {
-      Critical: 0,
-      Loss: 0
+      Watch: Number(metrics.Watch && metrics.Watch.count || 0),
+      Critical: Number(metrics.Critical && metrics.Critical.count || 0),
+      Loss: Number(metrics.Loss && metrics.Loss.count || 0)
     };
-
-    r.forEach(function (x) {
-      if (
-        counts[
-          x.risk_level
-        ] !== undefined
-      ) {
-        counts[
-          x.risk_level
-        ]++;
-      }
-    });
 
     Charts.draw(
       id,
       "doughnut",
-      ["Critical", "Loss"],
+      ["Watch", "Critical", "Loss"],
       [
         {
           label: "Risk",
           data: [
+            counts.Watch,
             counts.Critical,
             counts.Loss
           ],
           brsnrTones: [
+            "warn",
             "crit",
             "loss"
           ]
@@ -1984,7 +1981,7 @@ frappe.ready(function () {
       ],
       {
         emptyMsg:
-          "No Critical or Loss records returned by the risk endpoint."
+          "No Watch, Critical or Loss records returned by the risk endpoint."
       }
     );
   }
@@ -2353,9 +2350,17 @@ frappe.ready(function () {
           "No source data."
         );
 
-        Charts.na(
+        var currentHubs = d.hub_scorecard || [];
+        Charts.draw(
           "brsnr-ch-an-cur",
-          "Current-hub distribution is not provided by the dashboard API."
+          "bar",
+          currentHubs.map(function (row) { return row.hub; }),
+          [{
+            label: "Shipments by current hub",
+            data: currentHubs.map(function (row) { return row.total; }),
+            brsnrTone: "accent"
+          }],
+          { emptyMsg: "No current-hub data." }
         );
 
         Charts.na(
@@ -2472,171 +2477,131 @@ frappe.ready(function () {
 
   /* ---- Hub performance ---- */
 
+  function sortedScoreRows(rows, kind) {
+    var setting = (S.scoreSort[kind] || "total:desc").split(":");
+    var field = setting[0];
+    var direction = setting[1] === "asc" ? 1 : -1;
+    return (rows || []).slice().sort(function (a, b) {
+      var left = a[field];
+      var right = b[field];
+      if (typeof left === "string" || typeof right === "string") {
+        return direction * String(left || "").localeCompare(String(right || ""));
+      }
+      return direction * (Number(left || 0) - Number(right || 0));
+    });
+  }
+
+  function scoreCell(row, countKey, amountKey, filterAttr) {
+    var attrs = [];
+    if (row.hub !== undefined) {
+      attrs.push('data-score-current-hub="' + U.esc(row.hub) + '"');
+    }
+    if (row.assigned_hubs && row.assigned_hubs.length) {
+      attrs.push('data-score-source="' + U.esc(row.assigned_hubs.join(",")) + '"');
+    }
+    if (filterAttr) {
+      attrs.push(filterAttr);
+    }
+    return (
+      '<button type="button" class="brsnr-score-drill" ' +
+      attrs.join(" ") + ">" +
+      U.num(row[countKey]) +
+      '<small>' + U.money(row[amountKey]) + "</small></button>"
+    );
+  }
+
+  function scoreTotalsRow(total, kind) {
+    var label = kind === "hub" ? "Filtered total" : "Assigned total";
+    var fields = [
+      ["new_count", "new_amount"],
+      ["pending_count", "pending_amount"],
+      ["cleared_count", "cleared_amount"],
+      ["due_soon_count", "due_soon_amount"],
+      ["watch_count", "watch_amount"],
+      ["critical_count", "critical_amount"],
+      ["loss_count", "loss_amount"],
+      ["total", "total_amount"]
+    ];
+    return '<tr class="brsnr-total-row"><th colspan="' +
+      (kind === "hub" ? "1" : "2") + '">' + U.esc(label) +
+      "</th>" + fields.map(function (field) {
+        return '<td class="brsnr-num">' +
+          U.num(total[field[0]]) + "<small>" +
+          U.money(total[field[1]]) + "</small></td>";
+      }).join("") + "</tr>";
+  }
+
+  function renderHubScorecard(d) {
+    var rows = sortedScoreRows(d.hub_scorecard || d.hub_performance, "hub");
+    var body = byId("brsnr-tbody-hubs");
+    body.innerHTML = rows.length
+      ? rows.map(function (h) {
+          var currentHubButton =
+            '<button type="button" class="brsnr-link" data-score-current-hub="' +
+            U.esc(h.hub) + '">' + U.esc(h.hub) + "</button>";
+          return "<tr><th>" + currentHubButton + "</th>" +
+            "<td>" + scoreCell(h, "new_count", "new_amount", 'data-score-status="New"') + "</td>" +
+            "<td>" + scoreCell(h, "pending_count", "pending_amount", 'data-score-status="Pending"') + "</td>" +
+            "<td>" + scoreCell(h, "cleared_count", "cleared_amount", 'data-score-status="Cleared"') + "</td>" +
+            "<td>" + scoreCell(h, "due_soon_count", "due_soon_amount", 'data-score-clearance="Due Soon"') + "</td>" +
+            "<td>" + scoreCell(h, "watch_count", "watch_amount", 'data-score-risk="Watch"') + "</td>" +
+            "<td>" + scoreCell(h, "critical_count", "critical_amount", 'data-score-risk="Critical"') + "</td>" +
+            "<td>" + scoreCell(h, "loss_count", "loss_amount", 'data-score-risk="Loss"') + "</td>" +
+            "<td>" + scoreCell(h, "total", "total_amount", "") + "</td></tr>";
+        }).join("")
+      : R.emptyRow(9, "No hub data", "No current-hub groups match the selected filters.");
+    byId("brsnr-tfoot-hubs").innerHTML = rows.length
+      ? scoreTotalsRow(d.hub_scorecard_totals || {}, "hub")
+      : "";
+  }
+
+  function renderInchargeScorecard(d) {
+    var rows = sortedScoreRows(d.incharge_scorecard, "incharge");
+    var body = byId("brsnr-tbody-incharges");
+    body.innerHTML = rows.length
+      ? rows.map(function (item) {
+          var sourceButton =
+            '<button type="button" class="brsnr-link" data-score-source="' +
+            U.esc((item.assigned_hubs || []).join(",")) + '">' +
+            U.esc(item.assigned_hubs_text || "—") + "</button>";
+          return "<tr><th>" + U.esc(item.incharge_name) + "</th><td>" +
+            sourceButton + "</td>" +
+            "<td>" + scoreCell(item, "new_count", "new_amount", 'data-score-status="New"') + "</td>" +
+            "<td>" + scoreCell(item, "pending_count", "pending_amount", 'data-score-status="Pending"') + "</td>" +
+            "<td>" + scoreCell(item, "cleared_count", "cleared_amount", 'data-score-status="Cleared"') + "</td>" +
+            "<td>" + scoreCell(item, "due_soon_count", "due_soon_amount", 'data-score-clearance="Due Soon"') + "</td>" +
+            "<td>" + scoreCell(item, "watch_count", "watch_amount", 'data-score-risk="Watch"') + "</td>" +
+            "<td>" + scoreCell(item, "critical_count", "critical_amount", 'data-score-risk="Critical"') + "</td>" +
+            "<td>" + scoreCell(item, "loss_count", "loss_amount", 'data-score-risk="Loss"') + "</td>" +
+            "<td>" + scoreCell(item, "total", "total_amount", "") + "</td></tr>";
+        }).join("")
+      : R.emptyRow(10, "No active assignments", "No active incharge assignment is valid for this snapshot and scope.");
+    byId("brsnr-tfoot-incharges").innerHTML = rows.length
+      ? scoreTotalsRow(d.incharge_scorecard_totals || {}, "incharge")
+      : "";
+  }
+
   L.hubperf = function () {
     var ok =
       guard("hubperf");
 
-    var tb =
-      byId(
-        "brsnr-tbody-hubs"
-      );
+    var hubBody = byId("brsnr-tbody-hubs");
+    var inchargeBody = byId("brsnr-tbody-incharges");
+    R.skelRows(hubBody, 9, 4);
+    R.skelRows(inchargeBody, 10, 4);
 
-    R.skelRows(
-      tb,
-      12,
-      6
-    );
-
-    return needBase()
-      .then(function (d) {
-        if (!d || !ok())
-          return;
-
-        var hubs =
-          (
-            d.hub_performance ||
-            []
-          )
-            .map(function (h) {
-              return {
-                h: h,
-                p: hubClear(h)
-              };
-            })
-            .sort(
-              function (a, b) {
-                return (
-                  b.p - a.p ||
-                  b.h.cleared_count -
-                    a.h.cleared_count
-                );
-              }
-            );
-
-        tb.innerHTML =
-          hubs.length
-            ? hubs
-                .map(
-                  function (x, i) {
-                    var h =
-                      x.h;
-
-                    return (
-                      "<tr>" +
-                      "<td><strong>" +
-                      (i + 1) +
-                      "</strong></td>" +
-
-                      "<td><strong>" +
-                      U.esc(
-                        h.hub
-                      ) +
-                      "</strong>" +
-
-                      (
-                        h.hub_name &&
-                        h.hub_name !==
-                          h.hub
-                          ? '<div class="brsnr-muted">' +
-                            U.esc(
-                              h.hub_name
-                            ) +
-                            "</div>"
-                          : ""
-                      ) +
-
-                      "</td>" +
-
-                      '<td class="brsnr-num">' +
-                      U.num(
-                        h.total
-                      ) +
-                      "</td>" +
-
-                      '<td class="brsnr-num">' +
-                      U.num(
-                        h.new_count
-                      ) +
-                      "</td>" +
-
-                      '<td class="brsnr-num">' +
-                      U.num(
-                        h.pending_count
-                      ) +
-                      "</td>" +
-
-                      '<td class="brsnr-num">' +
-                      U.num(
-                        h.cleared_count
-                      ) +
-                      "</td>" +
-
-                      '<td class="brsnr-num brsnr-muted">—</td>' +
-
-                      '<td class="brsnr-num">' +
-                      (
-                        h.loss_count
-                          ? R.badge(
-                              U.num(
-                                h.loss_count
-                              ),
-                              "loss"
-                            )
-                          : "0"
-                      ) +
-                      "</td>" +
-
-                      '<td style="min-width:150px">' +
-                      '<div style="display:flex;align-items:center;gap:8px">' +
-                      R.bar(
-                        x.p,
-                        R.clearBarTone(
-                          x.p
-                        )
-                      ) +
-                      "<strong>" +
-                      U.dec(
-                        x.p,
-                        1
-                      ) +
-                      "%</strong></div>" +
-                      "</td>" +
-
-                      '<td class="brsnr-num">' +
-                      U.dec(
-                        h.avg_aging,
-                        1
-                      ) +
-                      "</td>" +
-
-                      '<td class="brsnr-num">' +
-                      U.money(
-                        h.loss_value
-                      ) +
-                      "</td>" +
-
-                      '<td class="brsnr-muted">—</td>' +
-
-                      "</tr>"
-                    );
-                  }
-                )
-                .join("")
-            : R.emptyRow(
-                12,
-                "No hub data",
-                "Upload a BRSNR snapshot to see hub performance."
-              );
-
-        S.loaded.hubperf =
-          true;
-      })
+    return needBase().then(function (d) {
+      if (!d || !ok()) return;
+      renderHubScorecard(d);
+      renderInchargeScorecard(d);
+      S.loaded.hubperf = true;
+    })
       .catch(function (e) {
         if (ok()) {
           fail(
             e,
-            tb,
-            12
+            hubBody,
+            9
           );
         }
       });
@@ -2668,12 +2633,11 @@ frappe.ready(function () {
   }
 
   function snapshotArgs(d) {
-    return {
-      hub: S.f.hub,
+    return dashArgs({
       from_date: d,
       to_date: d,
       limit: 1
-    };
+    });
   }
 
   function loadSnapshotKpis() {
@@ -2793,14 +2757,13 @@ frappe.ready(function () {
 
     return Api.post(
       "get_dashboard_data",
-      {
-        hub: S.f.hub,
+      dashArgs({
         from_date:
           U.iso(from),
         to_date:
           S.f.to,
         limit: 1
-      }
+      })
     )
       .then(function (r) {
         if (!ok()) return;
@@ -3334,15 +3297,34 @@ frappe.ready(function () {
   ];
 
   var COLS_HUB = [
-    ["Hub", "hub"],
-    ["Hub Name", "hub_name"],
-    ["Total", "total"],
-    ["New", "new_count"],
-    ["Pending", "pending_count"],
-    ["Cleared", "cleared_count"],
-    ["Loss", "loss_count"],
-    ["Avg Aging", "avg_aging"],
-    ["Loss Value", "loss_value"]
+    ["Current Hub", "hub"],
+    ["New Count", "new_count"], ["New Amount", "new_amount"],
+    ["Pending Count", "pending_count"], ["Pending Amount", "pending_amount"],
+    ["Cleared Count", "cleared_count"], ["Cleared Amount", "cleared_amount"],
+    ["Due Soon Count", "due_soon_count"], ["Due Soon Amount", "due_soon_amount"],
+    ["Watch Count", "watch_count"], ["Watch Amount", "watch_amount"],
+    ["Critical Count", "critical_count"], ["Critical Amount", "critical_amount"],
+    ["Loss Count", "loss_count"], ["Loss Amount", "loss_amount"],
+    ["Total", "total"], ["Total Shipment Value", "total_amount"]
+  ];
+
+  var COLS_INCHARGE = [
+    ["Incharge", "incharge_name"],
+    ["Assigned Hubs", "assigned_hubs_text"],
+    ["New Count", "new_count"], ["New Amount", "new_amount"],
+    ["Pending Count", "pending_count"], ["Pending Amount", "pending_amount"],
+    ["Cleared Count", "cleared_count"], ["Cleared Amount", "cleared_amount"],
+    ["Due Soon Count", "due_soon_count"], ["Due Soon Amount", "due_soon_amount"],
+    ["Watch Count", "watch_count"], ["Watch Amount", "watch_amount"],
+    ["Critical Count", "critical_count"], ["Critical Amount", "critical_amount"],
+    ["Loss Count", "loss_count"], ["Loss Amount", "loss_amount"],
+    ["Total", "total"], ["Total Shipment Value", "total_amount"]
+  ];
+
+  var COLS_SUMMARY = [
+    ["Metric", "metric"],
+    ["Count", "count"],
+    ["Amount", "amount"]
   ];
 
   L.reports = function () {
@@ -3361,8 +3343,9 @@ frappe.ready(function () {
     ).textContent =
       "Reports use the current hub filter (" +
       hub +
-      ") and the snapshot date resolved from the To date (latest if empty). " +
-      "Rows are fetched from the dashboard API in authorized pages. " +
+      "), current-hub, status, clearance and search filters. The snapshot date " +
+      "defaults to the latest available snapshot. Full report rows are fetched " +
+      "in authorized pages. " +
       "Historical-comparison export is not available; use the comparison in History.";
 
     return needBase()
@@ -3386,7 +3369,9 @@ frappe.ready(function () {
             {
               limit:
                 MAX_PAGE_LIMIT,
-              start: start
+              start: start,
+              loss_limit: 1,
+              loss_start: 0
             },
             extra || {}
           )
@@ -3394,40 +3379,68 @@ frappe.ready(function () {
       ).then(
         function (d) {
           last = d;
+          var pageRows = d.records || [];
 
           all =
             all.concat(
-              d.records || []
+              pageRows
             );
 
           start +=
             MAX_PAGE_LIMIT;
 
-          if (
-            (d.records || [])
-              .length <
-              MAX_PAGE_LIMIT ||
-            all.length >=
-              d.records_total ||
-            all.length >=
-              MAX_REPORT_ROWS
-          ) {
+          if (all.length >= Number(d.records_total || 0)) {
             return {
               d: last,
-              rows:
-                all.slice(
-                  0,
-                  MAX_REPORT_ROWS
-                ),
-              truncated:
-                all.length >= MAX_REPORT_ROWS &&
-                all.length < Number(d.records_total || 0)
+              rows: all
             };
+          }
+
+          if (!pageRows.length) {
+            throw new ApiError(
+              "The server returned an incomplete report page.",
+              0
+            );
           }
 
           return next();
         }
       );
+    }
+
+    return next();
+  }
+
+  function fetchAllLossRecords() {
+    var all = [];
+    var start = 0;
+
+    function next() {
+      return Api.post(
+        "get_dashboard_data",
+        dashArgs({
+          limit: 1,
+          start: 0,
+          sort_by: S.ship.sort,
+          sort_order: S.ship.dir,
+          loss_limit: MAX_PAGE_LIMIT,
+          loss_start: start
+        })
+      ).then(function (d) {
+        var rows = d.loss_register || [];
+        all = all.concat(rows);
+        if (all.length >= Number(d.loss_register_total || 0)) {
+          return { d: d, rows: all };
+        }
+        if (!rows.length) {
+          throw new ApiError(
+            "The server returned an incomplete Loss Register page.",
+            0
+          );
+        }
+        start += rows.length;
+        return next();
+      });
     }
 
     return next();
@@ -3448,65 +3461,95 @@ frappe.ready(function () {
       );
     }
 
-    if (
-      key.indexOf("loss") >= 0 ||
-      key.indexOf("hub") >= 0
-    ) {
-      return Api.post(
-        "get_dashboard_data",
-        dashArgs({ limit: 1 })
-      ).then(function (d) {
-        if (key.indexOf("loss") >= 0) {
-          return {
-            d: d,
-            cols: COLS_LOSS,
-            rows: d.loss_register || []
-          };
-        }
+    if (key.indexOf("loss") >= 0) {
+      return fetchAllLossRecords().then(function (r) {
+        r.cols = COLS_LOSS;
+        return r;
+      });
+    }
 
-        if (key.indexOf("hub") >= 0) {
-          return {
-            d: d,
-            cols: COLS_HUB,
-            rows: d.hub_performance || []
-          };
-        }
+    if (key.indexOf("summary") >= 0) {
+      return needBase().then(function (d) {
+        var s = d.summary || {};
+        var risks = d.risk_summary || {};
+        return {
+          d: d,
+          cols: COLS_SUMMARY,
+          rows: [
+            { metric: "Total shipments", count: s.total, amount: null },
+            { metric: "New", count: s["new"], amount: null },
+            { metric: "Pending", count: s.pending, amount: null },
+            { metric: "Cleared", count: s.cleared, amount: null },
+            { metric: "Due Soon", count: s.due_soon, amount: null },
+            { metric: "Watch", count: risks.Watch && risks.Watch.count, amount: risks.Watch && risks.Watch.amount },
+            { metric: "Critical", count: risks.Critical && risks.Critical.count, amount: risks.Critical && risks.Critical.amount },
+            { metric: "Loss", count: risks.Loss && risks.Loss.count, amount: risks.Loss && risks.Loss.amount },
+            { metric: "Total shipment value", count: null, amount: d.hub_scorecard_totals && d.hub_scorecard_totals.total_amount }
+          ]
+        };
+      });
+    }
 
+    if (key.indexOf("incharge") >= 0) {
+      return needBase().then(function (d) {
+        return {
+          d: d,
+          cols: COLS_INCHARGE,
+          rows: sortedScoreRows(d.incharge_scorecard, "incharge"),
+          totals: d.incharge_scorecard_totals
+        };
+      });
+    }
+
+    if (key.indexOf("hub") >= 0) {
+      return needBase().then(function (d) {
+        return {
+          d: d,
+          cols: COLS_HUB,
+          rows: sortedScoreRows(d.hub_scorecard || d.hub_performance, "hub"),
+          totals: d.hub_scorecard_totals
+        };
       });
     }
 
     if (key.indexOf("risk") >= 0) {
       return fetchAllRecords({
-        sort_by: "aging",
-        sort_order: "desc"
+        sort_by: S.ship.sort || "aging",
+        sort_order: S.ship.dir || "desc"
       }).then(function (r) {
         r.cols = COLS_RISK;
         r.rows = r.rows.filter(function (row) {
-          return (
-            row.risk_level === "Watch" ||
-            row.risk_level === "Critical" ||
-            row.risk_level === "Loss"
-          );
+          return row.risk_level === "Watch" || row.risk_level === "Critical";
         });
-        return r;
+        return fetchAllLossRecords().then(function (losses) {
+          losses.rows.forEach(function (row) {
+            row.risk_level = "Loss";
+          });
+          r.rows = r.rows.concat(losses.rows);
+          return r;
+        });
       });
     }
 
     var extra = {};
 
-    if (key.indexOf("pending") >= 0) {
+    if (key === "pending") {
       extra.status = "Pending";
-    } else if (key.indexOf("new") >= 0) {
+    } else if (key === "new") {
       extra.status = "New";
-    } else if (key.indexOf("clear") >= 0) {
+    } else if (key === "cleared") {
       extra.status = "Cleared";
     } else {
       extra.status = S.f.status;
       extra.clearance_status = S.f.clearance;
     }
 
-    extra.sort_by = "aging";
-    extra.sort_order = "desc";
+    extra.sort_by = key.indexOf("ageing") >= 0 || key.indexOf("due") >= 0
+      ? "days_remaining"
+      : S.ship.sort || "aging";
+    extra.sort_order = key.indexOf("ageing") >= 0 || key.indexOf("due") >= 0
+      ? "asc"
+      : S.ship.dir || "desc";
 
     return fetchAllRecords(extra).then(function (r) {
       r.cols = COLS_RECORDS;
@@ -3528,15 +3571,6 @@ frappe.ready(function () {
         return;
       }
 
-      if (r.truncated) {
-        toast(
-          "Report truncated to " +
-          U.num(MAX_REPORT_ROWS) +
-          " rows.",
-          "info"
-        );
-      }
-
       var headers = r.cols.map(function (c) {
         return c[0];
       });
@@ -3546,6 +3580,36 @@ frappe.ready(function () {
           return row[c[1]];
         });
       });
+      var totalRow = r.totals;
+      if (!totalRow && rows.length && r.cols !== COLS_SUMMARY) {
+        totalRow = {};
+        r.cols.forEach(function (col) {
+          if (col[1] === "shipment_id" || col[1] === "hub" || col[1] === "incharge_name") {
+            totalRow[col[1]] = "TOTAL (" + rows.length + ")";
+          } else if (col[1] === "total" || col[1].endsWith("_count")) {
+            totalRow[col[1]] = rows.reduce(function (sum, row) {
+              return sum + Number(row[col[1]] || 0);
+            }, 0);
+          } else if (col[1].endsWith("_amount") || col[1] === "total_price" || col[1] === "loss_amount") {
+            totalRow[col[1]] = rows.reduce(function (sum, row) {
+              return sum + Number(row[col[1]] || 0);
+            }, 0);
+          } else {
+            totalRow[col[1]] = "";
+          }
+        });
+      }
+      if (totalRow) {
+        if (totalRow.hub !== undefined || r.cols === COLS_HUB) {
+          totalRow.hub = "Filtered total";
+        }
+        if (totalRow.incharge_name !== undefined || r.cols === COLS_INCHARGE) {
+          totalRow.incharge_name = "Assigned total";
+        }
+        matrix.push(r.cols.map(function (col) {
+          return totalRow[col[1]];
+        }));
+      }
 
       var stamp =
         (r.d && r.d.brsnr_date) ||
@@ -3604,7 +3668,7 @@ frappe.ready(function () {
           }).join("") +
           "</tr></thead><tbody>" +
           matrix.map(function (x) {
-            return "<tr>" +
+            return "<tr" + (x === matrix[matrix.length - 1] && totalRow ? ' class="brsnr-total-row"' : "") + ">" +
               x.map(function (c) {
                 return "<td>" + U.val(c) + "</td>";
               }).join("") +
@@ -3759,6 +3823,28 @@ frappe.ready(function () {
     select.value = current;
   }
 
+  function renderCurrentHubOptions(scorecard) {
+    var select = byId("brsnr-current-hub");
+    if (!select) return;
+
+    var current = S.f.currentHub;
+    var hubs = (scorecard || []).map(function (row) {
+      return row.hub;
+    }).filter(function (hub, index, rows) {
+      return hub && rows.indexOf(hub) === index;
+    }).sort(function (a, b) {
+      return String(a).localeCompare(String(b));
+    });
+
+    select.innerHTML =
+      '<option value="">All current hubs</option>' +
+      hubs.map(function (hub) {
+        return '<option value="' + U.esc(hub) + '">' +
+          U.esc(hub) + "</option>";
+      }).join("");
+    select.value = current;
+  }
+
   function updateNavCounts(d) {
     var summary = (d && d.summary) || {};
     var values = {
@@ -3780,15 +3866,24 @@ frappe.ready(function () {
     if (snapshot) {
       snapshot.textContent = U.date(d && d.brsnr_date);
     }
+    renderCurrentHubOptions(d && d.hub_scorecard);
   }
 
   function renderOverviewPanels(d) {
-    var riskRows = d.risk || [];
+    var riskRows = (d.risk || []).slice();
+    (d.loss_register || []).slice(0, 5).forEach(function (row) {
+      riskRows.push(Object.assign({}, row, { risk_level: "Loss" }));
+    });
     reg(riskRows);
     reg(d.loss_register || []);
 
     var attention = byId("brsnr-ov-attention");
-    var urgent = riskRows.slice(0, 5);
+    var priority = { Loss: 0, Critical: 1, Watch: 2 };
+    var urgent = riskRows.sort(function (a, b) {
+      var left = priority[a.risk_level];
+      var right = priority[b.risk_level];
+      return (left === undefined ? 9 : left) - (right === undefined ? 9 : right);
+    }).slice(0, 5);
 
     attention.innerHTML = urgent.length
       ? urgent.map(function (r) {
@@ -3828,18 +3923,29 @@ frappe.ready(function () {
 
   var Filters = {
     read: function () {
+      var previous = [
+        S.f.from, S.f.to, S.f.hub, S.f.currentHub,
+        S.f.status, S.f.clearance, S.f.search
+      ].join("|");
       S.f.from = byId("brsnr-from").value;
       S.f.to = byId("brsnr-to").value;
       S.f.hub = byId("brsnr-hub").value;
+      S.f.currentHub = byId("brsnr-current-hub").value;
       S.f.status = byId("brsnr-status").value;
       S.f.clearance = byId("brsnr-clearance").value;
       S.f.search = byId("brsnr-search").value.trim();
+      var current = [
+        S.f.from, S.f.to, S.f.hub, S.f.currentHub,
+        S.f.status, S.f.clearance, S.f.search
+      ].join("|");
+      if (previous !== current) S.f.riskLevel = "";
     },
 
     write: function () {
       byId("brsnr-from").value = S.f.from;
       byId("brsnr-to").value = S.f.to;
       byId("brsnr-hub").value = S.f.hub;
+      byId("brsnr-current-hub").value = S.f.currentHub;
       byId("brsnr-status").value = S.f.status;
       byId("brsnr-clearance").value = S.f.clearance;
       byId("brsnr-search").value = S.f.search;
@@ -3865,8 +3971,10 @@ frappe.ready(function () {
         from: "",
         to: "",
         hub: "",
+        currentHub: "",
         status: "",
         clearance: "",
+        riskLevel: "",
         search: "",
         range: ""
       };
@@ -4022,9 +4130,17 @@ frappe.ready(function () {
         "info",
         "No source-hub data."
       );
-      Charts.na(
+      var currentHubs = d.hub_scorecard || [];
+      Charts.draw(
         "brsnr-ch-new-cur",
-        "Current-hub distribution is not provided as an aggregate by the dashboard API."
+        "bar",
+        currentHubs.map(function (row) { return row.hub; }),
+        [{
+          label: "New shipments by current hub",
+          data: currentHubs.map(function (row) { return row.new_count; }),
+          brsnrTone: "info"
+        }],
+        { emptyMsg: "No current-hub data." }
       );
       S.loaded.new = true;
       setLive("live");
@@ -4074,7 +4190,9 @@ frappe.ready(function () {
       (r.aging === null || r.aging === undefined ? "—" : U.num(r.aging)) +
       "</td>" +
       '<td class="brsnr-num">' + R.days(r) + "</td>" +
-      '<td class="brsnr-num">' + U.money(r.total_price) + "</td>" +
+      '<td class="brsnr-num">' +
+      U.money(r.risk_level === "Loss" ? r.loss_amount : r.total_price) +
+      "</td>" +
       "<td>" + R.risk(r.risk_level || "Loss") + "</td></tr>"
     );
   }
@@ -4086,51 +4204,48 @@ frappe.ready(function () {
     R.skelRows(tbody, 7);
     byId("brsnr-thead-risk").innerHTML = RISK_HEAD;
 
-    return Api.post(
-      "get_dashboard_data",
-      dashArgs({ limit: MAX_PAGE_LIMIT, start: 0 })
-    ).then(function (d) {
+    var rowsPromise = bucket === "Loss"
+      ? fetchAllLossRecords()
+      : fetchAllRecords({
+          sort_by: S.ship.sort,
+          sort_order: S.ship.dir
+        });
+
+    return Promise.all([needBase(), rowsPromise]).then(function (results) {
+      var d = results[0];
       if (!d || !ok()) return;
-      reg(d.records);
-      reg(d.loss_register);
 
-      var allRows = bucket === "Loss"
-        ? (d.loss_register || []).map(function (r) {
-            return Object.assign({}, r, { risk_level: "Loss" });
-          })
-        : (d.records || []).filter(function (r) {
-            return r.risk_level === bucket;
-          });
-
-      var complete = (d.records || []).length >= Number(d.records_total || 0);
+      var allRows = results[1].rows;
+      allRows.forEach(function (row) {
+        if (bucket === "Loss") row.risk_level = "Loss";
+      });
+      if (bucket !== "Loss") {
+        allRows = allRows.filter(function (row) {
+          return row.risk_level === bucket;
+        });
+      }
+      reg(allRows);
       S.risk.total = allRows.length;
       S.risk.page = Math.min(
         S.risk.page,
         Math.max(1, Math.ceil(S.risk.total / S.risk.size))
       );
 
-      var summary = d.summary || {};
-      var counts = {
-        Critical: complete
-          ? (d.records || []).filter(function (r) { return r.risk_level === "Critical"; }).length
-          : "—",
-        Watch: complete
-          ? (d.records || []).filter(function (r) { return r.risk_level === "Watch"; }).length
-          : "—",
-        Loss: U.num(summary.loss)
-      };
+      var risks = d.risk_summary || {};
       byId("brsnr-risk-tiles").innerHTML = [
         ["Critical", "crit"],
         ["Watch", "warn"],
         ["Loss", "loss"]
       ].map(function (x) {
+        var metric = risks[x[0]] || { count: 0, amount: 0 };
         return (
           '<button type="button" class="brsnr-risk-tile' +
           (bucket === x[0] ? " brsnr-active" : "") +
           '" data-tone="' + x[1] +
           '" data-risk-bucket="' + x[0] + '">' +
           '<span class="brsnr-kpi-label">' + x[0] + "</span>" +
-          '<span class="brsnr-kpi-value">' + counts[x[0]] + "</span></button>"
+          '<span class="brsnr-kpi-value">' + U.num(metric.count) + "</span>" +
+          '<span class="brsnr-kpi-sub">' + U.money(metric.amount) + "</span></button>"
         );
       }).join("");
 
@@ -4144,12 +4259,7 @@ frappe.ready(function () {
         : R.emptyRow(7, "No matching shipments", "No " + bucket + " records are available for this selection.");
 
       byId("brsnr-risk-count").textContent =
-        U.num(allRows.length) +
-        (bucket === "Loss" ? " loss-register records" : " matching records") +
-        (bucket !== "Loss" && !complete
-          ? " in the first " + U.num((d.records || []).length) +
-            " of " + U.num(d.records_total) + " records"
-          : "");
+        U.num(allRows.length) + " matching records";
 
       renderPager("brsnr-pager-risk", S.risk);
       S.loaded.risk = true;
@@ -4264,6 +4374,51 @@ frappe.ready(function () {
     byId("brsnr-content").addEventListener(
       "click",
       function (e) {
+        var sortScore = e.target.closest("[data-score-sort]");
+        if (sortScore) {
+          var table = sortScore.closest("table");
+          var kind = table && table.id === "brsnr-tbl-incharges"
+            ? "incharge"
+            : "hub";
+          var field = sortScore.getAttribute("data-score-sort");
+          var current = (S.scoreSort[kind] || "total:desc").split(":");
+          S.scoreSort[kind] = field + ":" +
+            (current[0] === field && current[1] === "desc" ? "asc" : "desc");
+          L.hubperf();
+          return;
+        }
+
+        var scoreDrill = e.target.closest(
+          "[data-score-current-hub], [data-score-source], .brsnr-score-drill"
+        );
+        if (scoreDrill) {
+          var currentHub = scoreDrill.getAttribute("data-score-current-hub");
+          var source = scoreDrill.getAttribute("data-score-source");
+          if (currentHub !== null) S.f.currentHub = currentHub;
+          if (source !== null) S.f.hub = source;
+          var operationalStatus = scoreDrill.getAttribute("data-score-status");
+          var clearanceStatus = scoreDrill.getAttribute("data-score-clearance");
+          var riskLevel = scoreDrill.getAttribute("data-score-risk");
+          if (operationalStatus !== null) {
+            S.f.status = operationalStatus;
+            S.f.clearance = "";
+            S.f.riskLevel = "";
+          } else if (clearanceStatus !== null) {
+            S.f.status = "";
+            S.f.clearance = clearanceStatus;
+            S.f.riskLevel = "";
+          } else if (riskLevel !== null) {
+            S.f.status = "";
+            S.f.clearance = "";
+            S.f.riskLevel = riskLevel;
+          }
+          S.ship.page = 1;
+          Filters.write();
+          invalidate();
+          Nav.go("shipments");
+          return;
+        }
+
         var rt = e.target.closest(
           "[data-risk-bucket]"
         );
