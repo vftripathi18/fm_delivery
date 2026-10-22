@@ -2244,10 +2244,10 @@ def get_dashboard_data(
         key=lambda row: (-row["pending_count"], -row["loss_count"]),
     )
 
-    source_scorecard = {}
+    source_scorecard_map = {}
     for hub_option in options:
         hub_name = hub_option["name"]
-        source_scorecard[hub_name] = {
+        source_scorecard_map[hub_name] = {
             "hub": hub_name,
             "source_hub": hub_name,
             "hub_name": hub_option.get("hub_name") or hub_name,
@@ -2257,12 +2257,12 @@ def get_dashboard_data(
             "loss_value": 0.0,
         }
     for row in source_performance:
-        score = source_scorecard.get(row["hub"])
+        score = source_scorecard_map.get(row["hub"])
         if score:
             score.update(row)
             score["source_hub"] = row["hub"]
     source_scorecard = sorted(
-        source_scorecard.values(),
+        source_scorecard_map.values(),
         key=lambda row: str(row["hub_name"]).lower(),
     )
     source_scorecard_totals = {
@@ -2325,7 +2325,7 @@ def get_dashboard_data(
         )
         if row.hub not in item["assigned_hubs"]:
             item["assigned_hubs"].append(row.hub)
-            source = source_scorecard.get(row.hub)
+            source = source_scorecard_map.get(row.hub)
             if not source:
                 continue
             item["hubs"].append(dict(source))
@@ -2339,7 +2339,7 @@ def get_dashboard_data(
             item["loss_amount"] += flt(source["loss_amount"])
 
     unassigned_hubs = [
-        dict(row) for row in source_scorecard
+        dict(row) for row in source_scorecard_map.values()
         if row["hub"] not in assignment_owner
     ]
     if unassigned_hubs:
