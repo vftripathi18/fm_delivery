@@ -2303,14 +2303,10 @@ def get_dashboard_data(
     assignment_owner = {}
     incharge_data = {}
     for row in assignment_rows:
-        owner = assignment_owner.get(row.hub)
-        if owner and owner != row.hub_incharge:
-            frappe.throw(
-                _("Multiple active incharges are assigned to Source hub {0} on {1}.")
-                .format(row.hub, snapshot_date),
-                frappe.ValidationError,
-            )
-        assignment_owner[row.hub] = row.hub_incharge
+        # A hub may be assigned to more than one active incharge on the same
+        # snapshot date. In that case, aggregate the same hub under each
+        # incharge instead of failing the dashboard request.
+        assignment_owner.setdefault(row.hub, set()).add(row.hub_incharge)
 
         item = incharge_data.setdefault(
             row.hub_incharge,
